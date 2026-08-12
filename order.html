@@ -44,9 +44,9 @@
 
   <div class="msg" id="orderFormMsg"></div>
 
-  <div class="cart-bar" id="cartBar" style="display:none;">
-    <span class="cart-total" id="cartTotal">₹0</span>
-    <button type="button" id="placeOrderBtn">Place Order</button>
+  <div class="cart-bar" id="cartBar">
+    <span class="cart-total" id="cartTotal">Add items to order</span>
+    <button type="button" id="placeOrderBtn" disabled>Place Order</button>
   </div>
 </div>
 
@@ -202,14 +202,17 @@ function cartTotal() {
 }
 
 function renderCartBar() {
-  const bar = document.getElementById('cartBar');
   const items = Object.values(cart);
+  const totalEl = document.getElementById('cartTotal');
+  const btn = document.getElementById('placeOrderBtn');
+
   if (items.length === 0) {
-    bar.style.display = 'none';
-    return;
+    totalEl.textContent = 'Add items to order';
+    btn.disabled = true;
+  } else {
+    totalEl.textContent = '₹' + cartTotal() + ' (' + items.length + ' item' + (items.length > 1 ? 's' : '') + ')';
+    btn.disabled = false;
   }
-  bar.style.display = 'flex';
-  document.getElementById('cartTotal').textContent = '₹' + cartTotal() + ' (' + items.length + ' item' + (items.length > 1 ? 's' : '') + ')';
 }
 
 // ---------- Order form ----------
