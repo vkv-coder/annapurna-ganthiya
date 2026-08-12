@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>Darsham Ganthiya - Counter Dashboard</title>
+<link rel="manifest" href="./manifest.json">
+<link rel="icon" href="./icons/icon.svg" type="image/svg+xml">
+<meta name="theme-color" content="#d9480f">
+<link rel="stylesheet" href="./css/style.css">
+</head>
+<body>
+
+<div class="page" id="appRoot" style="display:none;">
+
+  <div class="top-bar">
+    <h1>Counter Dashboard</h1>
+    <a href="owner-dashboard.html" class="icon-btn">&larr; Dashboard</a>
+  </div>
+
+  <div class="section-title">Pending Payments</div>
+  <div id="pendingList">
+    <div class="empty-state">Loading...</div>
+  </div>
+
+  <div class="section-title">Confirmed Today</div>
+  <div id="confirmedList">
+    <div class="empty-state">Loading...</div>
+  </div>
+
+  <div class="section-title">Table QR Cards</div>
+  <button type="button" class="btn-outline" id="toggleQrBtn" style="max-width:420px;">Show QR Codes for Printing</button>
+  <div class="qr-grid" id="qrGrid" style="display:none; margin-top:12px;"></div>
+
+</div>
+
+<div class="page" id="loadingRoot">
+  <p style="color:var(--muted);">Loading...</p>
+</div>
+
+<footer class="site-footer">
+  <div><a href="privacy.html">Privacy Policy</a> &middot; <a href="mailto:vkvcoder.support@gmail.com">vkvcoder.support@gmail.com</a></div>
+  <div class="powered-by">Powered by AnyApps.in</div>
+</footer>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+<script src="./js/config.js"></script>
+<script>
+registerServiceWorker();
+
+let refreshTimer = null;
+
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+function startOfTodayISO() {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  return d.toISOString();
+}
+
+// Fetches sessions + tables for a list of rounds and returns lookup maps.
+async function loadRoundContext(rounds) {
+  const sessionIds = [...new Set(rounds.map((r) => r.session_id))];
+  if (sessionIds.length === 0) return { sessionsById: {}, tablesById: {} };
+
+  const { data: sessions } = await supabaseClient
+    .from('ag_sessions')
+    .select('id, table_id, persons_count, customer_whatsapp')
+    .in('id', sessionIds);
+
+  const tableIds = [...new Set((sessions || []).map((s) => s.table_id))];
+  const { data: tables } = tableIds.length
+    ? await supabaseClient.from('ag_tables').select('id, table_no').in('id', tableIds)
+    : { data: [] };
+
+  const sessionsById = {};
+  (sessions || []).forEach((s) => { sessionsById[s.id] = s; });
+  const tablesById = {};
+  (tables || []).forEach((t) => { tablesById[t.id] = t; });
+
+  return { sessionsById, tablesById };
+}
+
+async function loadItemsForRounds(roundIds) {
+  if (roundIds.length === 0) return {};
+  const { data: items } = await supabaseClient
+    .from('ag_order_items')
+    .select('round_id, item_name, price, qty')
+    .in('round_id', roundIds);
+
+  const byRound = {};
+  (items || []).forEach((i) => {
+    if (!byRound[i.round_id]) byRound[i.round_id] = [];
+    byRound[i.round_id].push(i);
+  });
+  return byRound;
+}
+
+function itemsSummary(items) {
+  return (items || []).map((i) => i.item_name + ' x' + i.qty).join(', ');
+}
+
+// ---------- Pending ----------
+
+async function loadPending() {
+  const wrap = document.getElementById('pendingList');
+  const { data: rounds, error } = await supabaseClient
+    .from('ag_order_rounds')
+    .select('id, session_id, round_no, total_amount, created_at')
+    .eq('status', 'pending_payment')
+    .order('created_at', { ascending: true });
+
+  if (error) {
+    wrap.innerHTML = '<div class="empty-state">Could not load: ' + escapeHtml(error.message) + '</div>';
+    return;
+  }
+
+  if (!rounds || rounds.length === 0) {
+    wrap.innerHTML = '<div class="empty-state">No pending payments right now.</div>';
+    return;
+  }
+
+  const { sessionsById, tablesById } = await loadRoundContext(rounds);
+  const itemsByRound = await loadItemsForRounds(rounds.map((r) => r.id));
+
+  wrap.innerHTML = rounds.map((r) => {
+    const session = sessionsById[r.session_id] || {};
+    const table = tablesById[session.table_id] || {};
+    const items = itemsByRound[r.id] || [];
+    return `
+      <div class="order-card">
+        <div class="order-head">
+          <h4>Table ${table.table_no || '?'} &middot; Round ${r.round_no}</h4>
+          <span class="order-total">₹${r.total_amount}</span>
+        </div>
+        <p class="order-items">${escapeHtml(itemsSummary(items))} &middot; ${session.persons_count || '?'} persons</p>
+        <div class="order-actions">
+          <button type="button" class="btn-approve-upi" data-id="${r.id}" data-method="upi">Approve UPI</button>
+          <button type="button" class="btn-approve-cash" data-id="${r.id}" data-method="cash">Approve Cash</button>
+          <button type="button" class="btn-cancel-order" data-id="${r.id}">Cancel</button>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  wrap.querySelectorAll('.btn-approve-upi, .btn-approve-cash').forEach((btn) => {
+    btn.addEventListener('click', () => approveRound(btn.dataset.id, btn.dataset.method, btn));
+  });
+  wrap.querySelectorAll('.btn-cancel-order').forEach((btn) => {
+    btn.addEventListener('click', () => cancelRound(btn.dataset.id, btn));
+  });
+}
+
+async function approveRound(roundId, method, btn) {
+  btn.disabled = true;
+  const { error } = await supabaseClient
+    .from('ag_order_rounds')
+    .update({ status: 'confirmed', payment_method: method, confirmed_at: new Date().toISOString() })
+    .eq('id', roundId);
+
+  if (error) {
+    btn.disabled = false;
+    alert('Could not approve: ' + error.message);
+    return;
+  }
+  refreshAll();
+}
+
+async function cancelRound(roundId, btn) {
+  if (!confirm('Cancel this pending order?')) return;
+  btn.disabled = true;
+  const { error } = await supabaseClient
+    .from('ag_order_rounds')
+    .update({ status: 'cancelled' })
+    .eq('id', roundId);
+
+  if (error) {
+    btn.disabled = false;
+    alert('Could not cancel: ' + error.message);
+    return;
+  }
+  refreshAll();
+}
+
+// ---------- Confirmed today ----------
+
+async function loadConfirmedToday() {
+  const wrap = document.getElementById('confirmedList');
+  const { data: rounds, error } = await supabaseClient
+    .from('ag_order_rounds')
+    .select('id, session_id, round_no, total_amount, payment_method, created_at')
+    .eq('status', 'confirmed')
+    .gte('created_at', startOfTodayISO())
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    wrap.innerHTML = '<div class="empty-state">Could not load: ' + escapeHtml(error.message) + '</div>';
+    return;
+  }
+
+  if (!rounds || rounds.length === 0) {
+    wrap.innerHTML = '<div class="empty-state">No confirmed orders yet today.</div>';
+    return;
+  }
+
+  const { sessionsById, tablesById } = await loadRoundContext(rounds);
+  const itemsByRound = await loadItemsForRounds(rounds.map((r) => r.id));
+
+  wrap.innerHTML = rounds.map((r) => {
+    const session = sessionsById[r.session_id] || {};
+    const table = tablesById[session.table_id] || {};
+    const items = itemsByRound[r.id] || [];
+    return `
+      <div class="order-card">
+        <div class="order-head">
+          <h4>Table ${table.table_no || '?'} &middot; Round ${r.round_no}</h4>
+          <span class="order-total">₹${r.total_amount}</span>
+        </div>
+        <p class="order-items">${escapeHtml(itemsSummary(items))} &middot; ${(r.payment_method || '').toUpperCase()}</p>
+        <div class="order-actions">
+          <button type="button" class="btn-send-bill" data-id="${r.id}">Send Bill via WhatsApp</button>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  wrap.querySelectorAll('.btn-send-bill').forEach((btn) => {
+    const round = rounds.find((r) => r.id === btn.dataset.id);
+    const session = sessionsById[round.session_id] || {};
+    const table = tablesById[session.table_id] || {};
+    const items = itemsByRound[round.id] || [];
+    btn.addEventListener('click', () => sendBill(round, session, table, items));
+  });
+}
+
+function sendBill(round, session, table, items) {
+  if (!session.customer_whatsapp) {
+    alert('No WhatsApp number on file for this order.');
+    return;
+  }
+  const billText = buildBillText(table.table_no || '', items, round.total_amount, round.payment_method);
+  const waNumber = toWhatsAppNumber(session.customer_whatsapp);
+  window.open('https://wa.me/' + waNumber + '?text=' + encodeURIComponent(billText), '_blank');
+}
+
+// ---------- Table QR cards ----------
+
+let qrLoaded = false;
+
+document.getElementById('toggleQrBtn').addEventListener('click', async () => {
+  const grid = document.getElementById('qrGrid');
+  const btn = document.getElementById('toggleQrBtn');
+  const show = grid.style.display === 'none';
+  grid.style.display = show ? 'grid' : 'none';
+  btn.textContent = show ? 'Hide QR Codes' : 'Show QR Codes for Printing';
+
+  if (show && !qrLoaded) {
+    qrLoaded = true;
+    const { data: tables } = await supabaseClient
+      .from('ag_tables')
+      .select('id, table_no')
+      .eq('active', true)
+      .order('table_no', { ascending: true });
+
+    grid.innerHTML = (tables || []).map((t) => `
+      <div class="qr-card">
+        <canvas id="qr-${t.id}"></canvas>
+        <p>Table ${t.table_no}</p>
+      </div>
+    `).join('');
+
+    (tables || []).forEach((t) => {
+      const url = window.location.origin + window.location.pathname.replace('counter-dashboard.html', '') + 'order.html?table=' + t.id;
+      QRCode.toCanvas(document.getElementById('qr-' + t.id), url, { width: 140, margin: 1 });
+    });
+  }
+});
+
+// ---------- Refresh ----------
+
+function refreshAll() {
+  loadPending();
+  loadConfirmedToday();
+}
+
+(async () => {
+  const { data: sessionData } = await supabaseClient.auth.getSession();
+  const user = sessionData.session ? sessionData.session.user : null;
+
+  if (!user) {
+    window.location.href = 'index.html';
+    return;
+  }
+
+  const { data: profile, error } = await supabaseClient
+    .from('ag_restaurant_profile')
+    .select('approval_status')
+    .eq('owner_user_id', user.id)
+    .maybeSingle();
+
+  if (error || !profile || profile.approval_status !== 'approved') {
+    window.location.href = 'index.html';
+    return;
+  }
+
+  document.getElementById('loadingRoot').style.display = 'none';
+  document.getElementById('appRoot').style.display = 'flex';
+
+  refreshAll();
+  refreshTimer = setInterval(refreshAll, 10000);
+})();
+
+window.addEventListener('beforeunload', () => {
+  if (refreshTimer) clearInterval(refreshTimer);
+});
+</script>
+</body>
+</html>

@@ -573,3 +573,77 @@ footer.site-footer .powered-by {
 }
 
 .center-text { text-align: center; }
+
+.section-title {
+  width: 100%;
+  max-width: 420px;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--ink);
+  margin: 22px 0 10px;
+}
+
+.section-title:first-of-type { margin-top: 0; }
+
+.order-card {
+  width: 100%;
+  max-width: 420px;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  margin-bottom: 10px;
+  box-shadow: var(--shadow);
+}
+
+.order-card .order-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.order-card .order-head h4 { margin: 0; font-size: 15px; }
+.order-card .order-head .order-total { font-weight: 700; color: var(--brand-dark); }
+
+.order-card .order-items {
+  font-size: 13px;
+  color: var(--muted);
+  margin: 0 0 10px;
+}
+
+.order-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.order-actions button {
+  flex: 1;
+  min-height: 42px;
+  font-size: 13px;
+  padding: 8px 10px;
+}
+
+.btn-approve-upi { background: #0f9d58; color: #fff; }
+.btn-approve-cash { background: var(--brand); color: #fff; }
+.btn-cancel-order { background: var(--danger-bg); color: var(--danger); }
+.btn-send-bill { background: #25D366; color: #fff; }
+
+.qr-grid {
+  width: 100%;
+  max-width: 420px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.qr-card {
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px;
+  text-align: center;
+}
+
+.qr-card canvas { max-width: 100%; height: auto; }
+.qr-card p { margin: 6px 0 0; font-size: 12px; font-weight: 700; color: var(--ink); }
