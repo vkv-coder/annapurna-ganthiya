@@ -145,7 +145,7 @@ async function loadTickets() {
         <div class="table-row-body">
           ${roundItems.map((i) => {
             const btn = i.prepared
-              ? `<button type="button" class="item-status-btn state-ready" disabled>Ready</button>`
+              ? `<button type="button" class="item-status-btn state-served" disabled>Ready</button>`
               : `<button type="button" class="item-status-btn state-pending ready-btn" data-id="${i.id}">Pending</button>`;
             return `
               <div class="item-status-row">
