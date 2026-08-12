@@ -770,6 +770,118 @@ footer.site-footer .powered-by {
 
 .item-status-btn:disabled { cursor: default; opacity: 1; }
 
+.top-nav-strip {
+  width: 100%;
+  max-width: 420px;
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+
+.top-nav-strip a {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  background: #fff;
+  border: 1px solid var(--border);
+  padding: 6px 11px;
+  border-radius: 999px;
+  text-decoration: none;
+}
+
+.tab-strip {
+  width: 100%;
+  max-width: 420px;
+  display: flex;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+
+.tab-strip button {
+  flex: 1;
+  width: auto;
+  min-height: 40px;
+  padding: 9px 8px;
+  font-size: 13px;
+  font-weight: 700;
+  background: #fff;
+  border: 1.5px solid var(--border);
+  color: var(--muted);
+}
+
+.tab-strip button.active {
+  background: var(--brand);
+  border-color: var(--brand);
+  color: #fff;
+}
+
+.dense-row {
+  width: 100%;
+  max-width: 420px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin-bottom: 8px;
+}
+
+.dense-row .dr-left { display: flex; align-items: baseline; gap: 10px; }
+.dense-row .dr-table { font-size: 15px; font-weight: 700; color: var(--ink); }
+.dense-row .dr-amount { font-size: 14px; font-weight: 700; color: var(--brand-dark); }
+
+.dense-row .dr-actions { display: flex; gap: 6px; flex-shrink: 0; }
+
+.dense-row .dr-actions button {
+  width: auto;
+  min-height: 34px;
+  padding: 7px 11px;
+  font-size: 12px;
+  font-weight: 700;
+  border-radius: 8px;
+}
+
+.duration-badge {
+  font-size: 11.5px;
+  font-weight: 700;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: var(--success-bg);
+  color: var(--success);
+  white-space: nowrap;
+}
+
+.duration-badge.overdue {
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+
+.assign-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 0;
+  border-top: 1px solid var(--border);
+  margin-top: 8px;
+}
+
+.assign-row label { margin: 0; font-size: 12.5px; font-weight: 600; color: var(--muted); }
+
+.assign-row select {
+  padding: 8px 10px;
+  font-size: 13px;
+  border: 1.5px solid var(--border);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--ink);
+  font-family: inherit;
+}
+
 .ticket-item-row {
   display: flex;
   align-items: center;

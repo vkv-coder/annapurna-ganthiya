@@ -18,19 +18,36 @@
     <a href="owner-dashboard.html" class="icon-btn">&larr; Dashboard</a>
   </div>
 
-  <div class="section-title">Pending Payments</div>
-  <div id="pendingList">
-    <div class="empty-state">Loading...</div>
+  <div class="top-nav-strip">
+    <a href="kitchen-screen.html">Kitchen</a>
+    <a href="waiter-screen.html">Waiter</a>
+    <a href="menu-manager.html">Menu</a>
+    <a href="reports.html">Reports</a>
+    <a href="manage-staff.html">Staff</a>
+    <a href="#" id="qrNavLink">Print QR Cards</a>
   </div>
 
-  <div class="section-title">Confirmed Today</div>
-  <div id="confirmedList">
-    <div class="empty-state">Loading...</div>
+  <div class="tab-strip" id="tabStrip">
+    <button type="button" class="active" data-tab="pending">Pending</button>
+    <button type="button" data-tab="progress">In Progress</button>
+    <button type="button" data-tab="confirmed">Confirmed Today</button>
   </div>
 
-  <div class="section-title">Table QR Cards</div>
-  <button type="button" class="btn-outline" id="toggleQrBtn" style="max-width:420px;">Show QR Codes for Printing</button>
-  <div class="qr-grid" id="qrGrid" style="display:none; margin-top:12px;"></div>
+  <div id="pendingPane">
+    <div id="pendingList"><div class="empty-state">Loading...</div></div>
+  </div>
+
+  <div id="progressPane" style="display:none;">
+    <div id="progressList"><div class="empty-state">Loading...</div></div>
+  </div>
+
+  <div id="confirmedPane" style="display:none;">
+    <div id="confirmedList"><div class="empty-state">Loading...</div></div>
+  </div>
+
+  <div id="qrPane" style="display:none;">
+    <div class="qr-grid" id="qrGrid"></div>
+  </div>
 
 </div>
 
@@ -49,7 +66,10 @@
 <script>
 registerServiceWorker();
 
+const SLA_MINUTES = 10;
 let refreshTimer = null;
+let activeWaiters = [];
+const expandedRoundIds = new Set();
 
 function escapeHtml(str) {
   const div = document.createElement('div');
@@ -61,6 +81,10 @@ function startOfTodayISO() {
   const d = new Date();
   d.setHours(0, 0, 0, 0);
   return d.toISOString();
+}
+
+function minutesSince(isoTime) {
+  return Math.max(0, Math.round((Date.now() - new Date(isoTime).getTime()) / 60000));
 }
 
 // Fetches sessions + tables for a list of rounds and returns lookup maps.
@@ -90,7 +114,7 @@ async function loadItemsForRounds(roundIds) {
   if (roundIds.length === 0) return {};
   const { data: items } = await supabaseClient
     .from('ag_order_items')
-    .select('round_id, item_name, price, qty')
+    .select('round_id, item_name, price, qty, prepared, served')
     .in('round_id', roundIds);
 
   const byRound = {};
@@ -105,7 +129,31 @@ function itemsSummary(items) {
   return (items || []).map((i) => i.item_name + ' x' + i.qty).join(', ');
 }
 
-// ---------- Pending ----------
+// ---------- Tabs ----------
+
+document.querySelectorAll('#tabStrip button').forEach((btn) => {
+  btn.addEventListener('click', () => showTab(btn.dataset.tab));
+});
+
+document.getElementById('qrNavLink').addEventListener('click', (e) => {
+  e.preventDefault();
+  showTab('qr');
+  loadQrCodes();
+});
+
+function showTab(tab) {
+  const isQr = tab === 'qr';
+  document.getElementById('pendingPane').style.display = tab === 'pending' ? 'block' : 'none';
+  document.getElementById('progressPane').style.display = tab === 'progress' ? 'block' : 'none';
+  document.getElementById('confirmedPane').style.display = tab === 'confirmed' ? 'block' : 'none';
+  document.getElementById('qrPane').style.display = isQr ? 'block' : 'none';
+
+  document.querySelectorAll('#tabStrip button').forEach((b) => {
+    b.classList.toggle('active', b.dataset.tab === tab);
+  });
+}
+
+// ---------- Pending (dense, this is where the owner spends most of their time) ----------
 
 async function loadPending() {
   const wrap = document.getElementById('pendingList');
@@ -126,23 +174,20 @@ async function loadPending() {
   }
 
   const { sessionsById, tablesById } = await loadRoundContext(rounds);
-  const itemsByRound = await loadItemsForRounds(rounds.map((r) => r.id));
 
   wrap.innerHTML = rounds.map((r) => {
     const session = sessionsById[r.session_id] || {};
     const table = tablesById[session.table_id] || {};
-    const items = itemsByRound[r.id] || [];
     return `
-      <div class="order-card">
-        <div class="order-head">
-          <h4>Table ${table.table_no || '?'} &middot; Round ${r.round_no}</h4>
-          <span class="order-total">₹${r.total_amount}</span>
+      <div class="dense-row">
+        <div class="dr-left">
+          <span class="dr-table">Table ${table.table_no || '?'}</span>
+          <span class="dr-amount">₹${r.total_amount}</span>
         </div>
-        <p class="order-items">${escapeHtml(itemsSummary(items))} &middot; ${session.persons_count || '?'} persons</p>
-        <div class="order-actions">
-          <button type="button" class="btn-approve-upi" data-id="${r.id}" data-method="upi">Approve UPI</button>
-          <button type="button" class="btn-approve-cash" data-id="${r.id}" data-method="cash">Approve Cash</button>
-          <button type="button" class="btn-cancel-order" data-id="${r.id}">Cancel</button>
+        <div class="dr-actions">
+          <button type="button" class="btn-approve-upi" data-id="${r.id}" data-method="upi">UPI</button>
+          <button type="button" class="btn-approve-cash" data-id="${r.id}" data-method="cash">Cash</button>
+          <button type="button" class="btn-cancel-order" data-id="${r.id}">&times;</button>
         </div>
       </div>
     `;
@@ -185,6 +230,118 @@ async function cancelRound(roundId, btn) {
     return;
   }
   refreshAll();
+}
+
+// ---------- In Progress (timing/oversight -- this is where delays get spotted) ----------
+
+async function loadInProgress() {
+  const wrap = document.getElementById('progressList');
+  const { data: rounds, error } = await supabaseClient
+    .from('ag_order_rounds')
+    .select('id, session_id, round_no, total_amount, confirmed_at, assigned_waiter_id')
+    .eq('status', 'confirmed')
+    .order('confirmed_at', { ascending: true });
+
+  if (error) {
+    wrap.innerHTML = '<div class="empty-state">Could not load: ' + escapeHtml(error.message) + '</div>';
+    return;
+  }
+
+  const itemsByRound = await loadItemsForRounds((rounds || []).map((r) => r.id));
+  const activeRounds = (rounds || []).filter((r) => (itemsByRound[r.id] || []).some((i) => !i.served));
+
+  if (activeRounds.length === 0) {
+    wrap.innerHTML = '<div class="empty-state">No tables in progress right now.</div>';
+    return;
+  }
+
+  if (activeWaiters.length === 0) await loadActiveWaiters();
+  const waitersById = {};
+  activeWaiters.forEach((w) => { waitersById[w.staff_user_id] = w; });
+
+  const { sessionsById, tablesById } = await loadRoundContext(activeRounds);
+
+  wrap.innerHTML = activeRounds.map((r) => {
+    const session = sessionsById[r.session_id] || {};
+    const table = tablesById[session.table_id] || {};
+    const items = itemsByRound[r.id] || [];
+    const mins = minutesSince(r.confirmed_at);
+    const overdue = mins > SLA_MINUTES;
+    const isOpen = expandedRoundIds.has(r.id);
+    const waiterName = r.assigned_waiter_id && waitersById[r.assigned_waiter_id]
+      ? waitersById[r.assigned_waiter_id].name
+      : 'Unassigned';
+
+    return `
+      <div class="table-row ${isOpen ? 'is-open' : ''}" data-round="${r.id}">
+        <button type="button" class="table-row-header" data-toggle="${r.id}">
+          <span class="trh-left">
+            <h4>Table ${table.table_no || '?'} &middot; Round ${r.round_no}</h4>
+            <span class="trh-summary">${escapeHtml(waiterName)}</span>
+          </span>
+          <span class="duration-badge ${overdue ? 'overdue' : ''}">${mins} min</span>
+        </button>
+        <div class="table-row-body">
+          ${items.map((i) => `
+            <div class="item-status-row">
+              <span class="item-name">${escapeHtml(i.item_name)} <span class="item-qty">x${i.qty}</span></span>
+              <span class="status-pill ${i.served ? 'served' : i.prepared ? 'ready' : 'pending'}">${i.served ? 'Served' : i.prepared ? 'Ready' : 'Pending'}</span>
+            </div>
+          `).join('')}
+          <div class="assign-row">
+            <label for="assign-${r.id}">Assigned waiter</label>
+            <select id="assign-${r.id}" class="assign-select" data-round="${r.id}">
+              <option value="">Unassigned</option>
+              ${activeWaiters.map((w) => `<option value="${w.staff_user_id}" ${w.staff_user_id === r.assigned_waiter_id ? 'selected' : ''}>${escapeHtml(w.name)}</option>`).join('')}
+            </select>
+          </div>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  wrap.querySelectorAll('[data-toggle]').forEach((btn) => {
+    btn.addEventListener('click', () => toggleRound(btn.dataset.toggle));
+  });
+  wrap.querySelectorAll('.assign-select').forEach((sel) => {
+    sel.addEventListener('change', () => reassignWaiter(sel.dataset.round, sel.value || null, sel));
+  });
+}
+
+function toggleRound(roundId) {
+  if (expandedRoundIds.has(roundId)) {
+    expandedRoundIds.delete(roundId);
+  } else {
+    expandedRoundIds.add(roundId);
+  }
+  const card = document.querySelector('#progressList .table-row[data-round="' + roundId + '"]');
+  if (card) card.classList.toggle('is-open');
+}
+
+async function loadActiveWaiters() {
+  const { data } = await supabaseClient
+    .from('ag_staff')
+    .select('staff_user_id, name')
+    .eq('role', 'waiter')
+    .eq('active', true)
+    .order('name', { ascending: true });
+  activeWaiters = data || [];
+}
+
+async function reassignWaiter(roundId, waiterId, sel) {
+  sel.disabled = true;
+  const { error } = await supabaseClient
+    .from('ag_order_rounds')
+    .update({ assigned_waiter_id: waiterId })
+    .eq('id', roundId);
+  sel.disabled = false;
+
+  if (error) {
+    alert('Could not reassign: ' + error.message);
+    loadInProgress();
+    return;
+  }
+  loadInProgress();
 }
 
 // ---------- Confirmed today ----------
@@ -252,39 +409,35 @@ function sendBill(round, session, table, items) {
 
 let qrLoaded = false;
 
-document.getElementById('toggleQrBtn').addEventListener('click', async () => {
+async function loadQrCodes() {
+  if (qrLoaded) return;
+  qrLoaded = true;
   const grid = document.getElementById('qrGrid');
-  const btn = document.getElementById('toggleQrBtn');
-  const show = grid.style.display === 'none';
-  grid.style.display = show ? 'grid' : 'none';
-  btn.textContent = show ? 'Hide QR Codes' : 'Show QR Codes for Printing';
 
-  if (show && !qrLoaded) {
-    qrLoaded = true;
-    const { data: tables } = await supabaseClient
-      .from('ag_tables')
-      .select('id, table_no')
-      .eq('active', true)
-      .order('table_no', { ascending: true });
+  const { data: tables } = await supabaseClient
+    .from('ag_tables')
+    .select('id, table_no')
+    .eq('active', true)
+    .order('table_no', { ascending: true });
 
-    grid.innerHTML = (tables || []).map((t) => `
-      <div class="qr-card">
-        <canvas id="qr-${t.id}"></canvas>
-        <p>Table ${t.table_no}</p>
-      </div>
-    `).join('');
+  grid.innerHTML = (tables || []).map((t) => `
+    <div class="qr-card">
+      <canvas id="qr-${t.id}"></canvas>
+      <p>Table ${t.table_no}</p>
+    </div>
+  `).join('');
 
-    (tables || []).forEach((t) => {
-      const url = window.location.origin + window.location.pathname.replace('counter-dashboard.html', '') + 'order.html?table=' + t.id;
-      QRCode.toCanvas(document.getElementById('qr-' + t.id), url, { width: 140, margin: 1 });
-    });
-  }
-});
+  (tables || []).forEach((t) => {
+    const url = window.location.origin + window.location.pathname.replace('counter-dashboard.html', '') + 'order.html?table=' + t.id;
+    QRCode.toCanvas(document.getElementById('qr-' + t.id), url, { width: 140, margin: 1 });
+  });
+}
 
 // ---------- Refresh ----------
 
 function refreshAll() {
   loadPending();
+  loadInProgress();
   loadConfirmedToday();
 }
 
@@ -311,6 +464,7 @@ function refreshAll() {
   document.getElementById('loadingRoot').style.display = 'none';
   document.getElementById('appRoot').style.display = 'flex';
 
+  await loadActiveWaiters();
   refreshAll();
   refreshTimer = setInterval(refreshAll, 10000);
 })();

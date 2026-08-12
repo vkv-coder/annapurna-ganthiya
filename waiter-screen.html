@@ -37,6 +37,7 @@
 registerServiceWorker();
 
 let isOwnerSession = false;
+let currentUserId = null;
 let refreshTimer = null;
 let knownReadyIds = new Set();
 let firstLoad = true;
@@ -73,9 +74,9 @@ async function loadRoundContext(rounds) {
 async function loadTickets() {
   const wrap = document.getElementById('ticketsWrap');
 
-  const { data: rounds, error } = await supabaseClient
+  const { data: allRounds, error } = await supabaseClient
     .from('ag_order_rounds')
-    .select('id, session_id, round_no, created_at')
+    .select('id, session_id, round_no, created_at, assigned_waiter_id')
     .eq('status', 'confirmed')
     .order('created_at', { ascending: true });
 
@@ -83,6 +84,12 @@ async function loadTickets() {
     wrap.innerHTML = '<div class="empty-state">Could not load: ' + escapeHtml(error.message) + '</div>';
     return;
   }
+
+  // Owner sees every table regardless of who's assigned; a waiter only sees tables
+  // nobody has claimed yet, plus tables they themselves have claimed.
+  const rounds = isOwnerSession
+    ? (allRounds || [])
+    : (allRounds || []).filter((r) => !r.assigned_waiter_id || r.assigned_waiter_id === currentUserId);
 
   const roundIds = (rounds || []).map((r) => r.id);
   let items = [];
@@ -149,7 +156,7 @@ async function loadTickets() {
             if (i.served) {
               btn = `<button type="button" class="item-status-btn state-served" disabled>Served</button>`;
             } else if (i.prepared) {
-              btn = `<button type="button" class="item-status-btn state-ready serve-btn" data-id="${i.id}" data-name="${escapeHtml(i.item_name)}" data-table="${table.table_no || '?'}">Ready</button>`;
+              btn = `<button type="button" class="item-status-btn state-ready serve-btn" data-id="${i.id}" data-name="${escapeHtml(i.item_name)}" data-table="${table.table_no || '?'}" data-round="${r.id}" data-claimed="${r.assigned_waiter_id ? '1' : ''}">Ready</button>`;
             } else {
               btn = `<button type="button" class="item-status-btn state-pending" disabled>Pending</button>`;
             }
@@ -169,7 +176,7 @@ async function loadTickets() {
     btn.addEventListener('click', () => toggleRound(btn.dataset.toggle));
   });
   wrap.querySelectorAll('.serve-btn').forEach((btn) => {
-    btn.addEventListener('click', () => markServed(btn.dataset.id, btn.dataset.name, btn.dataset.table, btn));
+    btn.addEventListener('click', () => markServed(btn.dataset.id, btn.dataset.name, btn.dataset.table, btn.dataset.round, btn.dataset.claimed === '1', btn));
   });
 
   if (newlyReadyIds.length > 0) playAlertSound();
@@ -187,10 +194,22 @@ function toggleRound(roundId) {
   if (card) card.classList.toggle('is-open');
 }
 
-async function markServed(itemId, itemName, tableNo, btn) {
+async function markServed(itemId, itemName, tableNo, roundId, alreadyClaimed, btn) {
   if (!confirm('Mark "' + itemName + '" (Table ' + tableNo + ') as served?')) return;
 
   btn.disabled = true;
+
+  // First serve on an unclaimed table claims it for this waiter (owner taps don't claim --
+  // that tracking is only meaningful for real waiter assignment).
+  if (!isOwnerSession && !alreadyClaimed) {
+    await supabaseClient
+      .from('ag_order_rounds')
+      .update({ assigned_waiter_id: currentUserId })
+      .eq('id', roundId);
+    // If someone else claimed it a moment earlier, this silently affects 0 rows and the
+    // round will simply vanish from this waiter's list on the next refresh -- fine either way.
+  }
+
   const { error } = await supabaseClient
     .from('ag_order_items')
     .update({ served: true })
@@ -220,6 +239,8 @@ document.getElementById('logoutBtn').addEventListener('click', async () => {
   }
 
   isOwnerSession = access.isOwner;
+  const { data: sessionData } = await supabaseClient.auth.getSession();
+  currentUserId = sessionData.session ? sessionData.session.user.id : null;
 
   document.getElementById('loadingRoot').style.display = 'none';
   document.getElementById('appRoot').style.display = 'flex';
