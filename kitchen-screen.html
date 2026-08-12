@@ -17,10 +17,8 @@
     <button class="icon-btn" id="logoutBtn">Log Out</button>
   </div>
 
-  <div class="card placeholder-page">
-    <div class="big-icon">🍳</div>
-    <h2>Kitchen Screen - Coming in Phase 2</h2>
-    <p style="color:var(--muted);">Live order tickets will appear here.</p>
+  <div id="ticketsWrap">
+    <div class="empty-state">Loading...</div>
   </div>
 </div>
 
@@ -38,35 +36,157 @@
 <script>
 registerServiceWorker();
 
-document.getElementById('logoutBtn').addEventListener('click', async () => {
-  await supabaseClient.auth.signOut();
-  window.location.href = 'staff-login.html';
-});
+let isOwnerSession = false;
+let refreshTimer = null;
+let knownItemIds = new Set();
+let firstLoad = true;
 
-(async () => {
-  const { data: sessionData } = await supabaseClient.auth.getSession();
-  const user = sessionData.session ? sessionData.session.user : null;
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
 
-  if (!user) {
-    window.location.href = 'staff-login.html';
+async function loadRoundContext(rounds) {
+  const sessionIds = [...new Set(rounds.map((r) => r.session_id))];
+  if (sessionIds.length === 0) return { sessionsById: {}, tablesById: {} };
+
+  const { data: sessions } = await supabaseClient
+    .from('ag_sessions')
+    .select('id, table_id')
+    .in('id', sessionIds);
+
+  const tableIds = [...new Set((sessions || []).map((s) => s.table_id))];
+  const { data: tables } = tableIds.length
+    ? await supabaseClient.from('ag_tables').select('id, table_no').in('id', tableIds)
+    : { data: [] };
+
+  const sessionsById = {};
+  (sessions || []).forEach((s) => { sessionsById[s.id] = s; });
+  const tablesById = {};
+  (tables || []).forEach((t) => { tablesById[t.id] = t; });
+
+  return { sessionsById, tablesById };
+}
+
+async function loadTickets() {
+  const wrap = document.getElementById('ticketsWrap');
+
+  const { data: rounds, error } = await supabaseClient
+    .from('ag_order_rounds')
+    .select('id, session_id, round_no, created_at')
+    .eq('status', 'confirmed')
+    .order('created_at', { ascending: true });
+
+  if (error) {
+    wrap.innerHTML = '<div class="empty-state">Could not load: ' + escapeHtml(error.message) + '</div>';
     return;
   }
 
-  const { data: staff, error } = await supabaseClient
-    .from('ag_staff')
-    .select('role, active')
-    .eq('staff_user_id', user.id)
-    .maybeSingle();
+  const roundIds = (rounds || []).map((r) => r.id);
+  let items = [];
+  if (roundIds.length > 0) {
+    const { data } = await supabaseClient
+      .from('ag_order_items')
+      .select('id, round_id, item_name, qty, prepared')
+      .in('round_id', roundIds)
+      .eq('prepared', false);
+    items = data || [];
+  }
 
-  if (error || !staff || !staff.active || staff.role !== 'kitchen') {
+  const itemsByRound = {};
+  items.forEach((i) => {
+    if (!itemsByRound[i.round_id]) itemsByRound[i.round_id] = [];
+    itemsByRound[i.round_id].push(i);
+  });
+
+  const activeRounds = (rounds || []).filter((r) => itemsByRound[r.id] && itemsByRound[r.id].length > 0);
+
+  if (activeRounds.length === 0) {
+    wrap.innerHTML = '<div class="empty-state">No pending items. All caught up!</div>';
+    knownItemIds = new Set();
+    firstLoad = false;
+    return;
+  }
+
+  const { sessionsById, tablesById } = await loadRoundContext(activeRounds);
+
+  const currentItemIds = new Set(items.map((i) => i.id));
+  const hasNewItems = !firstLoad && [...currentItemIds].some((id) => !knownItemIds.has(id));
+
+  wrap.innerHTML = activeRounds.map((r) => {
+    const session = sessionsById[r.session_id] || {};
+    const table = tablesById[session.table_id] || {};
+    const roundItems = itemsByRound[r.id] || [];
+    const isNew = !firstLoad && roundItems.some((i) => !knownItemIds.has(i.id));
+    return `
+      <div class="ticket-card ${isNew ? 'is-new' : ''}">
+        <div class="ticket-head">
+          <h4>Table ${table.table_no || '?'} &middot; Round ${r.round_no}</h4>
+          <span class="ticket-time">${new Date(r.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+        </div>
+        ${roundItems.map((i) => `
+          <div class="ticket-item-row">
+            <span class="item-name">${escapeHtml(i.item_name)} <span class="item-qty">x${i.qty}</span></span>
+            <button type="button" class="ready-btn" data-id="${i.id}">Ready</button>
+          </div>
+        `).join('')}
+      </div>
+    `;
+  }).join('');
+
+  wrap.querySelectorAll('.ready-btn').forEach((btn) => {
+    btn.addEventListener('click', () => markReady(btn.dataset.id, btn));
+  });
+
+  if (hasNewItems) playAlertSound();
+  knownItemIds = currentItemIds;
+  firstLoad = false;
+}
+
+async function markReady(itemId, btn) {
+  btn.disabled = true;
+  btn.textContent = 'Done';
+  const { error } = await supabaseClient
+    .from('ag_order_items')
+    .update({ prepared: true })
+    .eq('id', itemId);
+
+  if (error) {
+    btn.disabled = false;
+    btn.textContent = 'Ready';
+    alert('Could not update: ' + error.message);
+    return;
+  }
+  setTimeout(loadTickets, 400);
+}
+
+document.getElementById('logoutBtn').addEventListener('click', async () => {
+  await supabaseClient.auth.signOut();
+  window.location.href = isOwnerSession ? 'owner-dashboard.html' : 'staff-login.html';
+});
+
+(async () => {
+  const access = await checkStaffOrOwnerAccess('kitchen');
+
+  if (!access.ok) {
     await supabaseClient.auth.signOut();
     window.location.href = 'staff-login.html';
     return;
   }
 
+  isOwnerSession = access.isOwner;
+
   document.getElementById('loadingRoot').style.display = 'none';
   document.getElementById('appRoot').style.display = 'flex';
+
+  loadTickets();
+  refreshTimer = setInterval(loadTickets, 6000);
 })();
+
+window.addEventListener('beforeunload', () => {
+  if (refreshTimer) clearInterval(refreshTimer);
+});
 </script>
 </body>
 </html>

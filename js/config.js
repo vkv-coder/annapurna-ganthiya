@@ -63,6 +63,57 @@ function toWhatsAppNumber(mobile) {
   return digits;
 }
 
+// Grants access to Kitchen/Waiter screens to either an approved owner (oversight access,
+// any role) or an active staff member whose ag_staff.role matches requiredRole.
+// Returns { ok: boolean, isOwner: boolean }.
+async function checkStaffOrOwnerAccess(requiredRole) {
+  const { data: sessionData } = await supabaseClient.auth.getSession();
+  const user = sessionData.session ? sessionData.session.user : null;
+  if (!user) return { ok: false, isOwner: false };
+
+  const { data: profile } = await supabaseClient
+    .from('ag_restaurant_profile')
+    .select('approval_status')
+    .eq('owner_user_id', user.id)
+    .maybeSingle();
+
+  if (profile && profile.approval_status === 'approved') {
+    return { ok: true, isOwner: true };
+  }
+
+  const { data: staff } = await supabaseClient
+    .from('ag_staff')
+    .select('role, active')
+    .eq('staff_user_id', user.id)
+    .maybeSingle();
+
+  if (staff && staff.active && staff.role === requiredRole) {
+    return { ok: true, isOwner: false };
+  }
+
+  return { ok: false, isOwner: false };
+}
+
+// Plays a short two-tone alert (no audio file needed) when a new ready-to-serve item appears.
+function playAlertSound() {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    [880, 1175].forEach((freq, i) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.frequency.value = freq;
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      gain.gain.setValueAtTime(0.15, ctx.currentTime + i * 0.18);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + i * 0.18 + 0.15);
+      osc.start(ctx.currentTime + i * 0.18);
+      osc.stop(ctx.currentTime + i * 0.18 + 0.15);
+    });
+  } catch (err) {
+    console.warn('Alert sound failed:', err);
+  }
+}
+
 // Registers the PWA service worker (no-op if unsupported).
 function registerServiceWorker() {
   if ('serviceWorker' in navigator) {

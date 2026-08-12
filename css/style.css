@@ -647,3 +647,56 @@ footer.site-footer .powered-by {
 
 .qr-card canvas { max-width: 100%; height: auto; }
 .qr-card p { margin: 6px 0 0; font-size: 12px; font-weight: 700; color: var(--ink); }
+
+.ticket-card {
+  width: 100%;
+  max-width: 420px;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  margin-bottom: 12px;
+  box-shadow: var(--shadow);
+}
+
+.ticket-card.is-new {
+  border-color: var(--brand);
+  box-shadow: 0 0 0 3px var(--brand-light);
+}
+
+.ticket-card .ticket-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.ticket-card .ticket-head h4 { margin: 0; font-size: 16px; }
+.ticket-card .ticket-head .ticket-time { font-size: 12px; color: var(--muted); }
+
+.ticket-item-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 0;
+}
+
+.ticket-item-row + .ticket-item-row { border-top: 1px dashed var(--border); }
+
+.ticket-item-row .item-name { font-size: 14px; font-weight: 600; }
+.ticket-item-row .item-qty { color: var(--muted); font-weight: 400; }
+
+.ticket-item-row button {
+  width: auto;
+  min-height: 38px;
+  padding: 8px 16px;
+  font-size: 13px;
+  background: var(--brand);
+  color: #fff;
+}
+
+.ticket-item-row button.served-btn { background: #0f9d58; }
+
+.ticket-item-row button:disabled { background: var(--success); opacity: 1; }
