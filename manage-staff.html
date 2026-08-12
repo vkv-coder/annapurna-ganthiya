@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>Darsham Ganthiya - Manage Staff</title>
+<link rel="manifest" href="./manifest.json">
+<link rel="icon" href="./icons/icon.svg" type="image/svg+xml">
+<meta name="theme-color" content="#d9480f">
+<link rel="stylesheet" href="./css/style.css">
+</head>
+<body>
+
+<div class="page" id="appRoot" style="display:none;">
+
+  <div class="top-bar">
+    <h1>Manage Staff</h1>
+    <a href="owner-dashboard.html" class="icon-btn">&larr; Dashboard</a>
+  </div>
+
+  <div class="staff-list" id="staffList">
+    <div class="empty-state">Loading staff...</div>
+  </div>
+
+  <div class="card" id="addStaffCard">
+    <h2>Add Staff</h2>
+    <form id="addStaffForm">
+      <label for="staffName">Name</label>
+      <input type="text" id="staffName" required placeholder="Full name">
+
+      <label for="staffMobile">Mobile Number</label>
+      <input type="tel" id="staffMobile" required placeholder="10-digit mobile number" inputmode="numeric">
+
+      <label for="staffPassword">Password</label>
+      <input type="password" id="staffPassword" required autocomplete="new-password" placeholder="At least 6 characters">
+
+      <label for="staffRole">Role</label>
+      <select id="staffRole" required>
+        <option value="">Select role</option>
+        <option value="kitchen">Kitchen</option>
+        <option value="waiter">Waiter</option>
+      </select>
+
+      <button type="submit" class="btn-primary" id="addStaffBtn">Add Staff</button>
+    </form>
+    <div class="msg" id="addStaffMsg"></div>
+  </div>
+
+</div>
+
+<div class="page" id="loadingRoot">
+  <p style="color:var(--muted);">Loading...</p>
+</div>
+
+<footer class="site-footer">
+  <div><a href="privacy.html">Privacy Policy</a> &middot; <a href="mailto:vkvcoder.support@gmail.com">vkvcoder.support@gmail.com</a></div>
+  <div class="powered-by">Powered by AnyApps.in</div>
+</footer>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="./js/config.js"></script>
+<script>
+registerServiceWorker();
+
+function showMsg(el, text, type) {
+  el.textContent = text;
+  el.className = 'msg show msg-' + type;
+}
+
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+function normalizeMobile(raw) {
+  return raw.replace(/\D/g, '');
+}
+
+async function loadStaff() {
+  const listEl = document.getElementById('staffList');
+  const { data, error } = await supabaseClient
+    .from('ag_staff')
+    .select('id, name, mobile, role, active, created_at')
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    listEl.innerHTML = '<div class="empty-state">Could not load staff: ' + escapeHtml(error.message) + '</div>';
+    return;
+  }
+
+  if (!data || data.length === 0) {
+    listEl.innerHTML = '<div class="empty-state">No staff added yet.</div>';
+    return;
+  }
+
+  listEl.innerHTML = data.map((row) => `
+    <div class="staff-row" data-id="${row.id}">
+      <div class="info">
+        <h4>${escapeHtml(row.name)}</h4>
+        <p>${escapeHtml(row.mobile)}</p>
+        <span class="role-pill">${escapeHtml(row.role)}</span>
+      </div>
+      <label class="toggle-switch">
+        <input type="checkbox" class="active-toggle" ${row.active ? 'checked' : ''} data-id="${row.id}">
+        <span class="toggle-slider"></span>
+      </label>
+    </div>
+  `).join('');
+
+  document.querySelectorAll('.active-toggle').forEach((toggle) => {
+    toggle.addEventListener('change', onToggleActive);
+  });
+}
+
+async function onToggleActive(e) {
+  const checkbox = e.target;
+  const id = checkbox.dataset.id;
+  const newValue = checkbox.checked;
+
+  checkbox.disabled = true;
+  const { error } = await supabaseClient
+    .from('ag_staff')
+    .update({ active: newValue })
+    .eq('id', id);
+  checkbox.disabled = false;
+
+  if (error) {
+    checkbox.checked = !newValue;
+    alert('Could not update staff status: ' + error.message);
+  }
+}
+
+document.getElementById('addStaffForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+
+  const name = document.getElementById('staffName').value.trim();
+  const mobileRaw = document.getElementById('staffMobile').value.trim();
+  const mobile = normalizeMobile(mobileRaw);
+  const password = document.getElementById('staffPassword').value;
+  const role = document.getElementById('staffRole').value;
+  const msgEl = document.getElementById('addStaffMsg');
+  const btn = document.getElementById('addStaffBtn');
+
+  if (mobile.length < 10) {
+    showMsg(msgEl, 'Please enter a valid mobile number.', 'error');
+    return;
+  }
+  if (password.length < 6) {
+    showMsg(msgEl, 'Password must be at least 6 characters.', 'error');
+    return;
+  }
+  if (!role) {
+    showMsg(msgEl, 'Please select a role.', 'error');
+    return;
+  }
+
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span>Adding...';
+
+  const staffEmail = mobile + STAFF_EMAIL_DOMAIN;
+
+  // Use an ephemeral (non-persisted) client so creating this auth user never
+  // overwrites the owner's own logged-in session in this browser.
+  const ephemeralClient = createEphemeralClient();
+  const { data: authData, error: authError } = await ephemeralClient.auth.signUp({
+    email: staffEmail,
+    password: password
+  });
+  ephemeralClient.auth.signOut().catch(() => {});
+
+  if (authError) {
+    btn.disabled = false;
+    btn.textContent = 'Add Staff';
+    const friendly = authError.message.includes('already registered')
+      ? 'A staff account with this mobile number already exists.'
+      : authError.message;
+    showMsg(msgEl, friendly, 'error');
+    return;
+  }
+
+  const newUserId = authData.user ? authData.user.id : null;
+  if (!newUserId) {
+    btn.disabled = false;
+    btn.textContent = 'Add Staff';
+    showMsg(msgEl, 'Account creation did not return a user. Please try again.', 'error');
+    return;
+  }
+
+  const { error: staffError } = await supabaseClient
+    .from('ag_staff')
+    .insert({
+      staff_user_id: newUserId,
+      name: name,
+      mobile: mobile,
+      role: role,
+      active: true
+    });
+
+  btn.disabled = false;
+  btn.textContent = 'Add Staff';
+
+  if (staffError) {
+    showMsg(msgEl, 'Login created, but saving staff details failed: ' + staffError.message + '. Please contact support.', 'error');
+    return;
+  }
+
+  showMsg(msgEl, 'Staff member added successfully.', 'success');
+  document.getElementById('addStaffForm').reset();
+  loadStaff();
+});
+
+(async () => {
+  const { data: sessionData } = await supabaseClient.auth.getSession();
+  const user = sessionData.session ? sessionData.session.user : null;
+
+  if (!user) {
+    window.location.href = 'index.html';
+    return;
+  }
+
+  const { data: profile, error } = await supabaseClient
+    .from('ag_restaurant_profile')
+    .select('approval_status')
+    .eq('owner_user_id', user.id)
+    .maybeSingle();
+
+  if (error || !profile || profile.approval_status !== 'approved') {
+    window.location.href = 'index.html';
+    return;
+  }
+
+  document.getElementById('loadingRoot').style.display = 'none';
+  document.getElementById('appRoot').style.display = 'flex';
+
+  loadStaff();
+})();
+</script>
+</body>
+</html>

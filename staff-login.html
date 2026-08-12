@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>Darsham Ganthiya - Staff Login</title>
+<link rel="manifest" href="./manifest.json">
+<link rel="icon" href="./icons/icon.svg" type="image/svg+xml">
+<meta name="theme-color" content="#d9480f">
+<link rel="stylesheet" href="./css/style.css">
+</head>
+<body>
+
+<div class="page">
+
+  <div class="brand-header">
+    <div class="logo-mark">DG</div>
+    <h1>Darsham Ganthiya</h1>
+    <p class="tagline">Kitchen &amp; Waiter Login</p>
+  </div>
+
+  <div class="card" id="loginCard">
+    <h2>Staff Login</h2>
+    <form id="staffLoginForm">
+      <label for="mobile">Mobile Number</label>
+      <input type="tel" id="mobile" required inputmode="numeric" placeholder="10-digit mobile number" autocomplete="username">
+
+      <label for="password">Password</label>
+      <input type="password" id="password" required autocomplete="current-password" placeholder="Your password">
+
+      <button type="submit" class="btn-primary" id="loginBtn">Log In</button>
+    </form>
+    <div class="msg" id="loginMsg"></div>
+  </div>
+
+</div>
+
+<footer class="site-footer">
+  <div><a href="mailto:vkvcoder.support@gmail.com">vkvcoder.support@gmail.com</a></div>
+  <div class="powered-by">Powered by AnyApps.in</div>
+</footer>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="./js/config.js"></script>
+<script>
+registerServiceWorker();
+
+function showMsg(el, text, type) {
+  el.textContent = text;
+  el.className = 'msg show msg-' + type;
+}
+
+function normalizeMobile(raw) {
+  return raw.replace(/\D/g, '');
+}
+
+async function routeStaff(userId) {
+  const msgEl = document.getElementById('loginMsg');
+
+  const { data: staff, error } = await supabaseClient
+    .from('ag_staff')
+    .select('role, active')
+    .eq('staff_user_id', userId)
+    .maybeSingle();
+
+  if (error) {
+    showMsg(msgEl, 'Could not check your staff account: ' + error.message, 'error');
+    await supabaseClient.auth.signOut();
+    return;
+  }
+
+  if (!staff) {
+    showMsg(msgEl, 'No staff account found for this login. Please contact your restaurant owner.', 'error');
+    await supabaseClient.auth.signOut();
+    return;
+  }
+
+  if (!staff.active) {
+    showMsg(msgEl, 'Your account has been deactivated. Please contact your restaurant owner.', 'error');
+    await supabaseClient.auth.signOut();
+    return;
+  }
+
+  if (staff.role === 'kitchen') {
+    window.location.href = 'kitchen-screen.html';
+  } else if (staff.role === 'waiter') {
+    window.location.href = 'waiter-screen.html';
+  } else {
+    showMsg(msgEl, 'Unknown staff role. Please contact your restaurant owner.', 'error');
+    await supabaseClient.auth.signOut();
+  }
+}
+
+document.getElementById('staffLoginForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+
+  const mobile = normalizeMobile(document.getElementById('mobile').value.trim());
+  const password = document.getElementById('password').value;
+  const msgEl = document.getElementById('loginMsg');
+  const btn = document.getElementById('loginBtn');
+
+  if (mobile.length < 10) {
+    showMsg(msgEl, 'Please enter a valid mobile number.', 'error');
+    return;
+  }
+
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span>Logging in...';
+
+  const staffEmail = mobile + STAFF_EMAIL_DOMAIN;
+  const { data, error } = await supabaseClient.auth.signInWithPassword({
+    email: staffEmail,
+    password: password
+  });
+
+  btn.disabled = false;
+  btn.textContent = 'Log In';
+
+  if (error) {
+    showMsg(msgEl, 'Incorrect mobile number or password.', 'error');
+    return;
+  }
+
+  msgEl.classList.remove('show');
+  await routeStaff(data.user.id);
+});
+
+// If already logged in as staff, route straight through.
+(async () => {
+  const { data: sessionData } = await supabaseClient.auth.getSession();
+  const user = sessionData.session ? sessionData.session.user : null;
+  if (user && user.email && user.email.endsWith(STAFF_EMAIL_DOMAIN)) {
+    await routeStaff(user.id);
+  }
+})();
+</script>
+</body>
+</html>

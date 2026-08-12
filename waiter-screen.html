@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>Darsham Ganthiya - Waiter Screen</title>
+<link rel="manifest" href="./manifest.json">
+<link rel="icon" href="./icons/icon.svg" type="image/svg+xml">
+<meta name="theme-color" content="#d9480f">
+<link rel="stylesheet" href="./css/style.css">
+</head>
+<body>
+
+<div class="page" id="appRoot" style="display:none;">
+  <div class="top-bar">
+    <h1>Waiter Screen</h1>
+    <button class="icon-btn" id="logoutBtn">Log Out</button>
+  </div>
+
+  <div class="card placeholder-page">
+    <div class="big-icon">🧑‍🍳</div>
+    <h2>Waiter Screen - Coming in Phase 2</h2>
+    <p style="color:var(--muted);">Table orders and service tools will appear here.</p>
+  </div>
+</div>
+
+<div class="page" id="loadingRoot">
+  <p style="color:var(--muted);">Loading...</p>
+</div>
+
+<footer class="site-footer">
+  <div><a href="mailto:vkvcoder.support@gmail.com">vkvcoder.support@gmail.com</a></div>
+  <div class="powered-by">Powered by AnyApps.in</div>
+</footer>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="./js/config.js"></script>
+<script>
+registerServiceWorker();
+
+document.getElementById('logoutBtn').addEventListener('click', async () => {
+  await supabaseClient.auth.signOut();
+  window.location.href = 'staff-login.html';
+});
+
+(async () => {
+  const { data: sessionData } = await supabaseClient.auth.getSession();
+  const user = sessionData.session ? sessionData.session.user : null;
+
+  if (!user) {
+    window.location.href = 'staff-login.html';
+    return;
+  }
+
+  const { data: staff, error } = await supabaseClient
+    .from('ag_staff')
+    .select('role, active')
+    .eq('staff_user_id', user.id)
+    .maybeSingle();
+
+  if (error || !staff || !staff.active || staff.role !== 'waiter') {
+    await supabaseClient.auth.signOut();
+    window.location.href = 'staff-login.html';
+    return;
+  }
+
+  document.getElementById('loadingRoot').style.display = 'none';
+  document.getElementById('appRoot').style.display = 'flex';
+})();
+</script>
+</body>
+</html>
