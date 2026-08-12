@@ -90,7 +90,7 @@ async function loadTickets() {
       .from('ag_order_items')
       .select('id, round_id, item_name, qty, prepared')
       .in('round_id', roundIds)
-      .eq('prepared', false);
+      .order('item_name', { ascending: true });
     items = data || [];
   }
 
@@ -100,7 +100,9 @@ async function loadTickets() {
     itemsByRound[i.round_id].push(i);
   });
 
-  const activeRounds = (rounds || []).filter((r) => itemsByRound[r.id] && itemsByRound[r.id].length > 0);
+  // A round stays on Kitchen (showing ALL its items, not just pending ones) until
+  // every item on it is prepared.
+  const activeRounds = (rounds || []).filter((r) => (itemsByRound[r.id] || []).some((i) => !i.prepared));
 
   if (activeRounds.length === 0) {
     wrap.innerHTML = '<div class="empty-state">No pending items. All caught up!</div>';
@@ -111,24 +113,26 @@ async function loadTickets() {
 
   const { sessionsById, tablesById } = await loadRoundContext(activeRounds);
 
+  // "New" means a genuinely new item just arrived (a fresh confirmed order), not a status change.
   const currentItemIds = new Set(items.map((i) => i.id));
-  const hasNewItems = !firstLoad && [...currentItemIds].some((id) => !knownItemIds.has(id));
+  const newItemIds = firstLoad ? [] : [...currentItemIds].filter((id) => !knownItemIds.has(id));
 
   wrap.innerHTML = activeRounds.map((r) => {
     const session = sessionsById[r.session_id] || {};
     const table = tablesById[session.table_id] || {};
     const roundItems = itemsByRound[r.id] || [];
-    const isNew = !firstLoad && roundItems.some((i) => !knownItemIds.has(i.id));
+    const isNew = roundItems.some((i) => newItemIds.includes(i.id));
     return `
       <div class="ticket-card ${isNew ? 'is-new' : ''}">
         <div class="ticket-head">
           <h4>Table ${table.table_no || '?'} &middot; Round ${r.round_no}</h4>
-          <span class="status-pill pending">Pending</span>
         </div>
         ${roundItems.map((i) => `
           <div class="ticket-item-row">
             <span class="item-name">${escapeHtml(i.item_name)} <span class="item-qty">x${i.qty}</span></span>
-            <button type="button" class="ready-btn" data-id="${i.id}">Ready</button>
+            ${i.prepared
+              ? '<span class="status-pill ready">Ready</span>'
+              : `<button type="button" class="ready-btn" data-id="${i.id}">Ready</button>`}
           </div>
         `).join('')}
       </div>
@@ -139,7 +143,7 @@ async function loadTickets() {
     btn.addEventListener('click', () => markReady(btn.dataset.id, btn));
   });
 
-  if (hasNewItems) playAlertSound();
+  if (newItemIds.length > 0) playAlertSound();
   knownItemIds = currentItemIds;
   firstLoad = false;
 }

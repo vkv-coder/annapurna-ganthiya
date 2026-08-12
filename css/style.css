@@ -688,6 +688,7 @@ footer.site-footer .powered-by {
 
 .status-pill.pending { background: var(--warn-bg); color: var(--warn); }
 .status-pill.ready { background: var(--success-bg); color: var(--success); }
+.status-pill.served { background: var(--border); color: var(--muted); }
 
 .ticket-item-row {
   display: flex;

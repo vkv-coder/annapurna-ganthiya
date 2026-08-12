@@ -38,7 +38,7 @@ registerServiceWorker();
 
 let isOwnerSession = false;
 let refreshTimer = null;
-let knownItemIds = new Set();
+let knownReadyIds = new Set();
 let firstLoad = true;
 
 function escapeHtml(str) {
@@ -90,8 +90,7 @@ async function loadTickets() {
       .from('ag_order_items')
       .select('id, round_id, item_name, qty, prepared, served')
       .in('round_id', roundIds)
-      .eq('prepared', true)
-      .eq('served', false);
+      .order('item_name', { ascending: true });
     items = data || [];
   }
 
@@ -101,39 +100,58 @@ async function loadTickets() {
     itemsByRound[i.round_id].push(i);
   });
 
-  // A round stays on screen only while it has at least one ready-not-served item;
-  // once every item is served it naturally drops out of this list.
-  const activeRounds = (rounds || []).filter((r) => itemsByRound[r.id] && itemsByRound[r.id].length > 0);
+  // A round stays on Waiter (showing ALL its items -- pending, ready, and served)
+  // until every item on it is served.
+  const activeRounds = (rounds || []).filter((r) => (itemsByRound[r.id] || []).some((i) => !i.served));
 
   if (activeRounds.length === 0) {
     wrap.innerHTML = '<div class="empty-state">Nothing waiting to be served.</div>';
-    knownItemIds = new Set();
+    knownReadyIds = new Set();
     firstLoad = false;
     return;
   }
 
   const { sessionsById, tablesById } = await loadRoundContext(activeRounds);
 
-  const currentItemIds = new Set(items.map((i) => i.id));
-  const hasNewItems = !firstLoad && [...currentItemIds].some((id) => !knownItemIds.has(id));
+  // "New" means an item just became ready-to-serve for the first time -- that's the
+  // moment the waiter actually needs to be alerted, not when an order first arrives.
+  const currentReadyIds = new Set(items.filter((i) => i.prepared && !i.served).map((i) => i.id));
+  const newlyReadyIds = firstLoad ? [] : [...currentReadyIds].filter((id) => !knownReadyIds.has(id));
 
   wrap.innerHTML = activeRounds.map((r) => {
     const session = sessionsById[r.session_id] || {};
     const table = tablesById[session.table_id] || {};
     const roundItems = itemsByRound[r.id] || [];
-    const isNew = !firstLoad && roundItems.some((i) => !knownItemIds.has(i.id));
+    const isNew = roundItems.some((i) => newlyReadyIds.includes(i.id));
     return `
       <div class="ticket-card ${isNew ? 'is-new' : ''}">
         <div class="ticket-head">
           <h4>Table ${table.table_no || '?'} &middot; Round ${r.round_no}</h4>
-          <span class="status-pill ready">Ready</span>
         </div>
-        ${roundItems.map((i) => `
-          <div class="ticket-item-row">
-            <span class="item-name">${escapeHtml(i.item_name)} <span class="item-qty">x${i.qty}</span></span>
-            <button type="button" class="served-btn" data-id="${i.id}">Served</button>
-          </div>
-        `).join('')}
+        ${roundItems.map((i) => {
+          if (i.served) {
+            return `
+              <div class="ticket-item-row">
+                <span class="item-name">${escapeHtml(i.item_name)} <span class="item-qty">x${i.qty}</span></span>
+                <span class="status-pill served">Served</span>
+              </div>
+            `;
+          }
+          if (i.prepared) {
+            return `
+              <div class="ticket-item-row">
+                <span class="item-name">${escapeHtml(i.item_name)} <span class="item-qty">x${i.qty}</span></span>
+                <button type="button" class="served-btn" data-id="${i.id}">Served</button>
+              </div>
+            `;
+          }
+          return `
+            <div class="ticket-item-row">
+              <span class="item-name">${escapeHtml(i.item_name)} <span class="item-qty">x${i.qty}</span></span>
+              <span class="status-pill pending">Pending</span>
+            </div>
+          `;
+        }).join('')}
       </div>
     `;
   }).join('');
@@ -142,8 +160,8 @@ async function loadTickets() {
     btn.addEventListener('click', () => markServed(btn.dataset.id, btn));
   });
 
-  if (hasNewItems) playAlertSound();
-  knownItemIds = currentItemIds;
+  if (newlyReadyIds.length > 0) playAlertSound();
+  knownReadyIds = currentReadyIds;
   firstLoad = false;
 }
 
