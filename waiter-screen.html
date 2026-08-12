@@ -126,7 +126,7 @@ async function loadTickets() {
       <div class="ticket-card ${isNew ? 'is-new' : ''}">
         <div class="ticket-head">
           <h4>Table ${table.table_no || '?'} &middot; Round ${r.round_no}</h4>
-          <span class="ticket-time">Ready</span>
+          <span class="status-pill ready">Ready</span>
         </div>
         ${roundItems.map((i) => `
           <div class="ticket-item-row">
@@ -149,7 +149,6 @@ async function loadTickets() {
 
 async function markServed(itemId, btn) {
   btn.disabled = true;
-  btn.textContent = 'Done';
   const { error } = await supabaseClient
     .from('ag_order_items')
     .update({ served: true })
@@ -157,11 +156,11 @@ async function markServed(itemId, btn) {
 
   if (error) {
     btn.disabled = false;
-    btn.textContent = 'Served';
     alert('Could not update: ' + error.message);
     return;
   }
-  setTimeout(loadTickets, 400);
+  // Item is removed from this list; once every item in the round is served, the round drops off entirely.
+  loadTickets();
 }
 
 document.getElementById('logoutBtn').addEventListener('click', async () => {

@@ -123,7 +123,7 @@ async function loadTickets() {
       <div class="ticket-card ${isNew ? 'is-new' : ''}">
         <div class="ticket-head">
           <h4>Table ${table.table_no || '?'} &middot; Round ${r.round_no}</h4>
-          <span class="ticket-time">${new Date(r.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+          <span class="status-pill pending">Pending</span>
         </div>
         ${roundItems.map((i) => `
           <div class="ticket-item-row">
@@ -146,7 +146,6 @@ async function loadTickets() {
 
 async function markReady(itemId, btn) {
   btn.disabled = true;
-  btn.textContent = 'Done';
   const { error } = await supabaseClient
     .from('ag_order_items')
     .update({ prepared: true })
@@ -154,11 +153,11 @@ async function markReady(itemId, btn) {
 
   if (error) {
     btn.disabled = false;
-    btn.textContent = 'Ready';
     alert('Could not update: ' + error.message);
     return;
   }
-  setTimeout(loadTickets, 400);
+  // Item moves to Waiter's queue and drops off this list on the next refresh.
+  loadTickets();
 }
 
 document.getElementById('logoutBtn').addEventListener('click', async () => {
