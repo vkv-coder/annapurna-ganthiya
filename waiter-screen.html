@@ -40,6 +40,7 @@ let isOwnerSession = false;
 let refreshTimer = null;
 let knownReadyIds = new Set();
 let firstLoad = true;
+const expandedRoundIds = new Set();
 
 function escapeHtml(str) {
   const div = document.createElement('div');
@@ -123,41 +124,52 @@ async function loadTickets() {
     const table = tablesById[session.table_id] || {};
     const roundItems = itemsByRound[r.id] || [];
     const isNew = roundItems.some((i) => newlyReadyIds.includes(i.id));
+    const isOpen = expandedRoundIds.has(r.id);
+
+    const pendingCount = roundItems.filter((i) => !i.prepared).length;
+    const readyCount = roundItems.filter((i) => i.prepared && !i.served).length;
+
+    const summaryPills = [
+      readyCount > 0 ? `<span class="status-pill ready">${readyCount} Ready</span>` : '',
+      pendingCount > 0 ? `<span class="status-pill pending">${pendingCount} Pending</span>` : ''
+    ].join('');
+
     return `
-      <div class="ticket-card ${isNew ? 'is-new' : ''}">
-        <div class="ticket-head">
-          <h4>Table ${table.table_no || '?'} &middot; Round ${r.round_no}</h4>
+      <div class="table-row ${isNew ? 'is-new' : ''} ${isOpen ? 'is-open' : ''}" data-round="${r.id}">
+        <button type="button" class="table-row-header" data-toggle="${r.id}">
+          <span class="trh-left">
+            <h4>Table ${table.table_no || '?'} &middot; Round ${r.round_no}</h4>
+            <span class="trh-summary">${summaryPills}</span>
+          </span>
+          <span class="trh-chevron">&#9656;</span>
+        </button>
+        <div class="table-row-body">
+          ${roundItems.map((i) => {
+            let btn;
+            if (i.served) {
+              btn = `<button type="button" class="item-status-btn state-served" disabled>Served</button>`;
+            } else if (i.prepared) {
+              btn = `<button type="button" class="item-status-btn state-ready serve-btn" data-id="${i.id}" data-name="${escapeHtml(i.item_name)}" data-table="${table.table_no || '?'}">Ready</button>`;
+            } else {
+              btn = `<button type="button" class="item-status-btn state-pending" disabled>Pending</button>`;
+            }
+            return `
+              <div class="item-status-row">
+                <span class="item-name">${escapeHtml(i.item_name)} <span class="item-qty">x${i.qty}</span></span>
+                ${btn}
+              </div>
+            `;
+          }).join('')}
         </div>
-        ${roundItems.map((i) => {
-          if (i.served) {
-            return `
-              <div class="ticket-item-row">
-                <span class="item-name">${escapeHtml(i.item_name)} <span class="item-qty">x${i.qty}</span></span>
-                <span class="status-pill served">Served</span>
-              </div>
-            `;
-          }
-          if (i.prepared) {
-            return `
-              <div class="ticket-item-row">
-                <span class="item-name">${escapeHtml(i.item_name)} <span class="item-qty">x${i.qty}</span></span>
-                <button type="button" class="served-btn" data-id="${i.id}">Served</button>
-              </div>
-            `;
-          }
-          return `
-            <div class="ticket-item-row">
-              <span class="item-name">${escapeHtml(i.item_name)} <span class="item-qty">x${i.qty}</span></span>
-              <span class="status-pill pending">Pending</span>
-            </div>
-          `;
-        }).join('')}
       </div>
     `;
   }).join('');
 
-  wrap.querySelectorAll('.served-btn').forEach((btn) => {
-    btn.addEventListener('click', () => markServed(btn.dataset.id, btn));
+  wrap.querySelectorAll('[data-toggle]').forEach((btn) => {
+    btn.addEventListener('click', () => toggleRound(btn.dataset.toggle));
+  });
+  wrap.querySelectorAll('.serve-btn').forEach((btn) => {
+    btn.addEventListener('click', () => markServed(btn.dataset.id, btn.dataset.name, btn.dataset.table, btn));
   });
 
   if (newlyReadyIds.length > 0) playAlertSound();
@@ -165,7 +177,19 @@ async function loadTickets() {
   firstLoad = false;
 }
 
-async function markServed(itemId, btn) {
+function toggleRound(roundId) {
+  if (expandedRoundIds.has(roundId)) {
+    expandedRoundIds.delete(roundId);
+  } else {
+    expandedRoundIds.add(roundId);
+  }
+  const card = document.querySelector('.table-row[data-round="' + roundId + '"]');
+  if (card) card.classList.toggle('is-open');
+}
+
+async function markServed(itemId, itemName, tableNo, btn) {
+  if (!confirm('Mark "' + itemName + '" (Table ' + tableNo + ') as served?')) return;
+
   btn.disabled = true;
   const { error } = await supabaseClient
     .from('ag_order_items')
@@ -177,7 +201,7 @@ async function markServed(itemId, btn) {
     alert('Could not update: ' + error.message);
     return;
   }
-  // Item is removed from this list; once every item in the round is served, the round drops off entirely.
+  // Item updates in place; once every item in the round is served, the round drops off entirely.
   loadTickets();
 }
 

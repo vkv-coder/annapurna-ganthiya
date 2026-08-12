@@ -40,6 +40,7 @@ let isOwnerSession = false;
 let refreshTimer = null;
 let knownItemIds = new Set();
 let firstLoad = true;
+const expandedRoundIds = new Set();
 
 function escapeHtml(str) {
   const div = document.createElement('div');
@@ -122,23 +123,45 @@ async function loadTickets() {
     const table = tablesById[session.table_id] || {};
     const roundItems = itemsByRound[r.id] || [];
     const isNew = roundItems.some((i) => newItemIds.includes(i.id));
+    const isOpen = expandedRoundIds.has(r.id);
+
+    const pendingCount = roundItems.filter((i) => !i.prepared).length;
+    const readyCount = roundItems.filter((i) => i.prepared).length;
+
+    const summaryPills = [
+      pendingCount > 0 ? `<span class="status-pill pending">${pendingCount} Pending</span>` : '',
+      readyCount > 0 ? `<span class="status-pill ready">${readyCount} Ready</span>` : ''
+    ].join('');
+
     return `
-      <div class="ticket-card ${isNew ? 'is-new' : ''}">
-        <div class="ticket-head">
-          <h4>Table ${table.table_no || '?'} &middot; Round ${r.round_no}</h4>
+      <div class="table-row ${isNew ? 'is-new' : ''} ${isOpen ? 'is-open' : ''}" data-round="${r.id}">
+        <button type="button" class="table-row-header" data-toggle="${r.id}">
+          <span class="trh-left">
+            <h4>Table ${table.table_no || '?'} &middot; Round ${r.round_no}</h4>
+            <span class="trh-summary">${summaryPills}</span>
+          </span>
+          <span class="trh-chevron">&#9656;</span>
+        </button>
+        <div class="table-row-body">
+          ${roundItems.map((i) => {
+            const btn = i.prepared
+              ? `<button type="button" class="item-status-btn state-ready" disabled>Ready</button>`
+              : `<button type="button" class="item-status-btn state-pending ready-btn" data-id="${i.id}">Pending</button>`;
+            return `
+              <div class="item-status-row">
+                <span class="item-name">${escapeHtml(i.item_name)} <span class="item-qty">x${i.qty}</span></span>
+                ${btn}
+              </div>
+            `;
+          }).join('')}
         </div>
-        ${roundItems.map((i) => `
-          <div class="ticket-item-row">
-            <span class="item-name">${escapeHtml(i.item_name)} <span class="item-qty">x${i.qty}</span></span>
-            ${i.prepared
-              ? '<span class="status-pill ready">Ready</span>'
-              : `<button type="button" class="ready-btn" data-id="${i.id}">Ready</button>`}
-          </div>
-        `).join('')}
       </div>
     `;
   }).join('');
 
+  wrap.querySelectorAll('[data-toggle]').forEach((btn) => {
+    btn.addEventListener('click', () => toggleRound(btn.dataset.toggle));
+  });
   wrap.querySelectorAll('.ready-btn').forEach((btn) => {
     btn.addEventListener('click', () => markReady(btn.dataset.id, btn));
   });
@@ -146,6 +169,16 @@ async function loadTickets() {
   if (newItemIds.length > 0) playAlertSound();
   knownItemIds = currentItemIds;
   firstLoad = false;
+}
+
+function toggleRound(roundId) {
+  if (expandedRoundIds.has(roundId)) {
+    expandedRoundIds.delete(roundId);
+  } else {
+    expandedRoundIds.add(roundId);
+  }
+  const card = document.querySelector('.table-row[data-round="' + roundId + '"]');
+  if (card) card.classList.toggle('is-open');
 }
 
 async function markReady(itemId, btn) {
@@ -160,7 +193,7 @@ async function markReady(itemId, btn) {
     alert('Could not update: ' + error.message);
     return;
   }
-  // Item moves to Waiter's queue and drops off this list on the next refresh.
+  // Item moves to Waiter's queue; the row drops off Kitchen once every item on it is prepared.
   loadTickets();
 }
 
