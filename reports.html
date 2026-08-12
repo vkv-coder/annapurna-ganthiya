@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>Darsham Ganthiya - Reports</title>
+<link rel="manifest" href="./manifest.json">
+<link rel="icon" href="./icons/icon.svg" type="image/svg+xml">
+<meta name="theme-color" content="#d9480f">
+<link rel="stylesheet" href="./css/style.css">
+</head>
+<body>
+
+<div class="page" id="appRoot" style="display:none;">
+
+  <div class="top-bar">
+    <h1>Reports</h1>
+    <a href="owner-dashboard.html" class="icon-btn">&larr; Dashboard</a>
+  </div>
+
+  <div class="date-range-bar">
+    <div class="preset-row" id="presetRow">
+      <button type="button" data-preset="today" class="active">Today</button>
+      <button type="button" data-preset="yesterday">Yesterday</button>
+      <button type="button" data-preset="week">This Week</button>
+      <button type="button" data-preset="month">This Month</button>
+    </div>
+    <div class="custom-range-row">
+      <input type="date" id="fromDate">
+      <span style="color:var(--muted);">to</span>
+      <input type="date" id="toDate">
+      <button type="button" class="btn-primary" id="applyRangeBtn" style="margin-top:0; width:auto; min-height:44px; padding:0 16px;">Go</button>
+    </div>
+  </div>
+
+  <div id="reportBody">
+    <div class="empty-state">Loading...</div>
+  </div>
+
+</div>
+
+<div class="page" id="loadingRoot">
+  <p style="color:var(--muted);">Loading...</p>
+</div>
+
+<footer class="site-footer">
+  <div><a href="privacy.html">Privacy Policy</a> &middot; <a href="mailto:vkvcoder.support@gmail.com">vkvcoder.support@gmail.com</a></div>
+  <div class="powered-by">Powered by AnyApps.in</div>
+</footer>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="./js/config.js"></script>
+<script>
+registerServiceWorker();
+
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+function fmtMoney(n) {
+  return '₹' + Number(n || 0).toFixed(2).replace(/\.00$/, '');
+}
+
+function localMidnight(date) {
+  const d = new Date(date);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+function addDays(date, n) {
+  const d = new Date(date);
+  d.setDate(d.getDate() + n);
+  return d;
+}
+
+function toDateInputValue(date) {
+  const d = new Date(date);
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return yyyy + '-' + mm + '-' + dd;
+}
+
+function setActivePreset(preset) {
+  document.querySelectorAll('#presetRow button').forEach((b) => {
+    b.classList.toggle('active', b.dataset.preset === preset);
+  });
+}
+
+function applyPreset(preset) {
+  const today = localMidnight(new Date());
+  let from, to;
+
+  if (preset === 'today') {
+    from = today; to = addDays(today, 1);
+  } else if (preset === 'yesterday') {
+    from = addDays(today, -1); to = today;
+  } else if (preset === 'week') {
+    const dayOfWeek = (today.getDay() + 6) % 7; // Monday = 0
+    from = addDays(today, -dayOfWeek); to = addDays(today, 1);
+  } else if (preset === 'month') {
+    from = new Date(today.getFullYear(), today.getMonth(), 1);
+    to = addDays(today, 1);
+  }
+
+  document.getElementById('fromDate').value = toDateInputValue(from);
+  document.getElementById('toDate').value = toDateInputValue(addDays(to, -1));
+  setActivePreset(preset);
+  loadReport(from, to);
+}
+
+document.querySelectorAll('#presetRow button').forEach((btn) => {
+  btn.addEventListener('click', () => applyPreset(btn.dataset.preset));
+});
+
+document.getElementById('applyRangeBtn').addEventListener('click', () => {
+  const fromVal = document.getElementById('fromDate').value;
+  const toVal = document.getElementById('toDate').value;
+  if (!fromVal || !toVal) return;
+  setActivePreset(null);
+  const from = localMidnight(new Date(fromVal + 'T00:00:00'));
+  const to = addDays(localMidnight(new Date(toVal + 'T00:00:00')), 1);
+  loadReport(from, to);
+});
+
+async function loadReport(from, to) {
+  const body = document.getElementById('reportBody');
+  body.innerHTML = '<div class="empty-state">Loading...</div>';
+
+  const { data: rounds, error } = await supabaseClient
+    .from('ag_order_rounds')
+    .select('id, total_amount, payment_method, confirmed_at')
+    .eq('status', 'confirmed')
+    .gte('confirmed_at', from.toISOString())
+    .lt('confirmed_at', to.toISOString());
+
+  if (error) {
+    body.innerHTML = '<div class="empty-state">Could not load report: ' + escapeHtml(error.message) + '</div>';
+    return;
+  }
+
+  if (!rounds || rounds.length === 0) {
+    body.innerHTML = `
+      <div class="stat-grid">
+        <div class="stat-tile wide"><div class="stat-label">Total Sales</div><div class="stat-value">₹0</div></div>
+      </div>
+      <div class="empty-state">No confirmed orders in this period.</div>
+    `;
+    return;
+  }
+
+  const roundIds = rounds.map((r) => r.id);
+  const { data: items } = await supabaseClient
+    .from('ag_order_items')
+    .select('round_id, item_name, menu_item_id, price, qty')
+    .in('round_id', roundIds);
+
+  const menuItemIds = [...new Set((items || []).map((i) => i.menu_item_id).filter(Boolean))];
+  let gstRateById = {};
+  if (menuItemIds.length > 0) {
+    const { data: menuItems } = await supabaseClient
+      .from('ag_menu_items')
+      .select('id, gst_rate')
+      .in('id', menuItemIds);
+    (menuItems || []).forEach((m) => { gstRateById[m.id] = m.gst_rate; });
+  }
+
+  // ---- Payment totals ----
+  let cashTotal = 0, onlineTotal = 0;
+  rounds.forEach((r) => {
+    if (r.payment_method === 'cash') cashTotal += Number(r.total_amount);
+    else onlineTotal += Number(r.total_amount);
+  });
+  const grandTotal = cashTotal + onlineTotal;
+
+  // ---- Item-wise ----
+  const itemStats = {};
+  (items || []).forEach((i) => {
+    if (!itemStats[i.item_name]) itemStats[i.item_name] = { qty: 0, amount: 0 };
+    itemStats[i.item_name].qty += i.qty;
+    itemStats[i.item_name].amount += i.price * i.qty;
+  });
+  const itemRows = Object.entries(itemStats).sort((a, b) => b[1].amount - a[1].amount);
+
+  // ---- GST rate-wise (prices are GST-inclusive; back out the tax) ----
+  const gstStats = {};
+  (items || []).forEach((i) => {
+    const rate = i.menu_item_id != null && gstRateById[i.menu_item_id] != null ? Number(gstRateById[i.menu_item_id]) : null;
+    const key = rate === null ? 'Unknown' : rate;
+    if (!gstStats[key]) gstStats[key] = { taxable: 0 };
+    gstStats[key].taxable += i.price * i.qty;
+  });
+  const gstRows = Object.entries(gstStats).map(([rate, s]) => {
+    if (rate === 'Unknown') return { rate: 'Unknown', taxable: s.taxable, gst: 0, net: s.taxable };
+    const r = Number(rate);
+    const gst = s.taxable * r / (100 + r);
+    return { rate: r, taxable: s.taxable, gst: gst, net: s.taxable - gst };
+  }).sort((a, b) => (a.rate === 'Unknown' ? 1 : b.rate === 'Unknown' ? -1 : a.rate - b.rate));
+  const totalGst = gstRows.reduce((sum, r) => sum + r.gst, 0);
+
+  body.innerHTML = `
+    <div class="stat-grid">
+      <div class="stat-tile wide"><div class="stat-label">Total Sales</div><div class="stat-value">${fmtMoney(grandTotal)}</div></div>
+      <div class="stat-tile"><div class="stat-label">Cash</div><div class="stat-value">${fmtMoney(cashTotal)}</div></div>
+      <div class="stat-tile"><div class="stat-label">Online (UPI)</div><div class="stat-value">${fmtMoney(onlineTotal)}</div></div>
+      <div class="stat-tile"><div class="stat-label">Orders</div><div class="stat-value">${rounds.length}</div></div>
+      <div class="stat-tile"><div class="stat-label">Total GST</div><div class="stat-value">${fmtMoney(totalGst)}</div></div>
+    </div>
+
+    <div class="section-title">Item-wise Sales</div>
+    <div class="report-table-wrap">
+      <table class="bill-table">
+        <thead><tr><th>Item</th><th class="num">Qty</th><th class="num">Amount</th></tr></thead>
+        <tbody>
+          ${itemRows.map(([name, s]) => `
+            <tr><td>${escapeHtml(name)}</td><td class="num">${s.qty}</td><td class="num">${fmtMoney(s.amount)}</td></tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="section-title">GST, Rate-wise</div>
+    <div class="report-table-wrap">
+      <table class="bill-table">
+        <thead><tr><th>Rate</th><th class="num">Taxable Amt</th><th class="num">GST Amt</th><th class="num">Net Amt</th></tr></thead>
+        <tbody>
+          ${gstRows.map((r) => `
+            <tr>
+              <td>${r.rate === 'Unknown' ? 'Unknown' : r.rate + '%'}</td>
+              <td class="num">${fmtMoney(r.taxable)}</td>
+              <td class="num">${fmtMoney(r.gst)}</td>
+              <td class="num">${fmtMoney(r.net)}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+(async () => {
+  const { data: sessionData } = await supabaseClient.auth.getSession();
+  const user = sessionData.session ? sessionData.session.user : null;
+
+  if (!user) {
+    window.location.href = 'index.html';
+    return;
+  }
+
+  const { data: profile, error } = await supabaseClient
+    .from('ag_restaurant_profile')
+    .select('approval_status')
+    .eq('owner_user_id', user.id)
+    .maybeSingle();
+
+  if (error || !profile || profile.approval_status !== 'approved') {
+    window.location.href = 'index.html';
+    return;
+  }
+
+  document.getElementById('loadingRoot').style.display = 'none';
+  document.getElementById('appRoot').style.display = 'flex';
+
+  applyPreset('today');
+})();
+</script>
+</body>
+</html>
