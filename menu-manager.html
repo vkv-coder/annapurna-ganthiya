@@ -98,7 +98,7 @@ async function loadMenu() {
     <div class="staff-row" data-id="${row.id}">
       <div class="info">
         <h4>${escapeHtml(row.name)}</h4>
-        <p>${formatPrice(row.price)} <span style="color:var(--muted);">${escapeHtml(row.unit)}</span></p>
+        <p><strong>${formatPrice(row.price)}</strong> <span style="color:var(--muted);">(${escapeHtml(row.unit)})</span></p>
         <p style="margin-top:4px;">
           GST:
           <input type="text" class="gst-rate-input" data-id="${row.id}" value="${row.gst_rate}" inputmode="decimal"

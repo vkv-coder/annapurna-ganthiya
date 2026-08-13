@@ -159,12 +159,16 @@ async function loadReport(from, to) {
 
   const menuItemIds = [...new Set((items || []).map((i) => i.menu_item_id).filter(Boolean))];
   let gstRateById = {};
+  let unitById = {};
   if (menuItemIds.length > 0) {
     const { data: menuItems } = await supabaseClient
       .from('ag_menu_items')
-      .select('id, gst_rate')
+      .select('id, gst_rate, unit')
       .in('id', menuItemIds);
-    (menuItems || []).forEach((m) => { gstRateById[m.id] = m.gst_rate; });
+    (menuItems || []).forEach((m) => {
+      gstRateById[m.id] = m.gst_rate;
+      unitById[m.id] = m.unit;
+    });
   }
 
   // ---- Payment totals ----
@@ -178,7 +182,7 @@ async function loadReport(from, to) {
   // ---- Item-wise ----
   const itemStats = {};
   (items || []).forEach((i) => {
-    if (!itemStats[i.item_name]) itemStats[i.item_name] = { qty: 0, amount: 0 };
+    if (!itemStats[i.item_name]) itemStats[i.item_name] = { qty: 0, amount: 0, unit: unitById[i.menu_item_id] || '' };
     itemStats[i.item_name].qty += i.qty;
     itemStats[i.item_name].amount += i.price * i.qty;
   });
@@ -212,10 +216,10 @@ async function loadReport(from, to) {
     <div class="section-title">Item-wise Sales</div>
     <div class="report-table-wrap">
       <table class="bill-table">
-        <thead><tr><th>Item</th><th class="num">Qty</th><th class="num">Amount</th></tr></thead>
+        <thead><tr><th>Item</th><th>Unit</th><th class="num">Qty</th><th class="num">Amount</th></tr></thead>
         <tbody>
           ${itemRows.map(([name, s]) => `
-            <tr><td>${escapeHtml(name)}</td><td class="num">${s.qty}</td><td class="num">${fmtMoney(s.amount)}</td></tr>
+            <tr><td>${escapeHtml(name)}</td><td>${escapeHtml(s.unit)}</td><td class="num">${s.qty}</td><td class="num">${fmtMoney(s.amount)}</td></tr>
           `).join('')}
         </tbody>
       </table>

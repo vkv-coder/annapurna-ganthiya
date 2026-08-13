@@ -23,10 +23,10 @@
     <h2>Staff Login</h2>
     <form id="staffLoginForm" autocomplete="off">
       <label for="mobile">Mobile Number</label>
-      <input type="tel" id="mobile" required inputmode="numeric" placeholder="10-digit mobile number" autocomplete="off">
+      <input type="tel" id="mobile" name="staff-id-01" required inputmode="numeric" placeholder="10-digit mobile number" autocomplete="off" readonly onfocus="this.removeAttribute('readonly')">
 
       <label for="password">Password</label>
-      <input type="password" id="password" required autocomplete="off" placeholder="Your password">
+      <input type="password" id="password" name="staff-pw-02" required autocomplete="new-password" placeholder="Your password" readonly onfocus="this.removeAttribute('readonly')">
 
       <button type="submit" class="btn-primary" id="loginBtn">Log In</button>
     </form>
