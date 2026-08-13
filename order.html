@@ -319,7 +319,7 @@ document.getElementById('placeOrderBtn').addEventListener('click', async () => {
 function buildUpiLink(amount) {
   const note = 'Table ' + (tableInfo ? tableInfo.table_no : '') + ' Order';
   return 'upi://pay?pa=' + encodeURIComponent(UPI_VPA) +
-    '&pn=' + encodeURIComponent(RESTAURANT_DISPLAY_NAME) +
+    '&pn=' + encodeURIComponent(UPI_PAYEE_NAME) +
     '&am=' + encodeURIComponent(amount) +
     '&tn=' + encodeURIComponent(note) +
     '&cu=INR';

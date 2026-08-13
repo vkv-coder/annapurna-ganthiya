@@ -11,6 +11,10 @@ const RESTAURANT_DISPLAY_NAME = 'Darsham Ganthiya';
 // (the same one printed on the physical table-card UPI QR) before accepting real customer orders.
 const UPI_VPA = '7359016000@rbl';
 
+// Must match the bank-registered account-holder name for UPI_VPA above, or GPay/PhonePe/Paytm
+// will block the payment as a payee-name mismatch (fraud check) — update both together.
+const UPI_PAYEE_NAME = 'Aditya V Vora';
+
 // Primary client: persists the logged-in session (owner or staff) in localStorage.
 const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
