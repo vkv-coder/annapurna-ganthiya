@@ -21,12 +21,12 @@
 
   <div class="card" id="loginCard">
     <h2>Staff Login</h2>
-    <form id="staffLoginForm">
+    <form id="staffLoginForm" autocomplete="off">
       <label for="mobile">Mobile Number</label>
-      <input type="tel" id="mobile" required inputmode="numeric" placeholder="10-digit mobile number" autocomplete="username">
+      <input type="tel" id="mobile" required inputmode="numeric" placeholder="10-digit mobile number" autocomplete="off">
 
       <label for="password">Password</label>
-      <input type="password" id="password" required autocomplete="current-password" placeholder="Your password">
+      <input type="password" id="password" required autocomplete="off" placeholder="Your password">
 
       <button type="submit" class="btn-primary" id="loginBtn">Log In</button>
     </form>
