@@ -110,7 +110,7 @@ async function loadMenu() {
           <input type="checkbox" class="available-toggle" ${row.is_paused ? '' : 'checked'} data-id="${row.id}">
           <span class="toggle-slider"></span>
         </label>
-        <span style="font-size:11px; color:var(--muted); font-weight:600;">${row.is_paused ? 'Paused' : 'Available'}</span>
+        <span class="avail-status-label" style="font-size:10.5px; font-weight:700; padding:2px 8px; border-radius:999px; ${row.is_paused ? 'background:#ffd400; color:#3a2e00;' : 'color:var(--muted);'}">${row.is_paused ? 'Paused' : 'Available'}</span>
       </div>
     </div>
   `).join('');
@@ -151,7 +151,7 @@ async function onToggleAvailable(e) {
   const checkbox = e.target;
   const id = checkbox.dataset.id;
   const isAvailable = checkbox.checked;
-  const label = checkbox.closest('div').querySelector('span');
+  const label = checkbox.closest('div').querySelector('.avail-status-label');
 
   checkbox.disabled = true;
   const { error } = await supabaseClient
@@ -165,7 +165,11 @@ async function onToggleAvailable(e) {
     alert('Could not update item: ' + error.message);
     return;
   }
-  if (label) label.textContent = isAvailable ? 'Available' : 'Paused';
+  if (label) {
+    label.textContent = isAvailable ? 'Available' : 'Paused';
+    label.style.background = isAvailable ? '' : '#ffd400';
+    label.style.color = isAvailable ? 'var(--muted)' : '#3a2e00';
+  }
 }
 
 document.getElementById('addItemForm').addEventListener('submit', async (e) => {
