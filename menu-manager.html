@@ -105,21 +105,18 @@ async function loadMenu() {
             style="width:50px; display:inline-block; padding:4px 6px; font-size:13px; border:1px solid var(--border); border-radius:6px;">%
         </p>
       </div>
-      <div style="display:flex; align-items:center; gap:14px;">
+      <div style="display:flex; flex-direction:column; align-items:center; gap:4px;">
         <label class="toggle-switch">
           <input type="checkbox" class="available-toggle" ${row.is_paused ? '' : 'checked'} data-id="${row.id}">
           <span class="toggle-slider"></span>
         </label>
-        <button type="button" class="icon-btn remove-item-btn" data-id="${row.id}" data-name="${escapeHtml(row.name)}">Remove</button>
+        <span style="font-size:11px; color:var(--muted); font-weight:600;">${row.is_paused ? 'Paused' : 'Available'}</span>
       </div>
     </div>
   `).join('');
 
   document.querySelectorAll('.available-toggle').forEach((toggle) => {
     toggle.addEventListener('change', onToggleAvailable);
-  });
-  document.querySelectorAll('.remove-item-btn').forEach((btn) => {
-    btn.addEventListener('click', onRemoveItem);
   });
   document.querySelectorAll('.gst-rate-input').forEach((input) => {
     input.addEventListener('change', onGstRateChange);
@@ -154,6 +151,7 @@ async function onToggleAvailable(e) {
   const checkbox = e.target;
   const id = checkbox.dataset.id;
   const isAvailable = checkbox.checked;
+  const label = checkbox.closest('div').querySelector('span');
 
   checkbox.disabled = true;
   const { error } = await supabaseClient
@@ -165,28 +163,9 @@ async function onToggleAvailable(e) {
   if (error) {
     checkbox.checked = !isAvailable;
     alert('Could not update item: ' + error.message);
-  }
-}
-
-async function onRemoveItem(e) {
-  const btn = e.target;
-  const id = btn.dataset.id;
-  const name = btn.dataset.name;
-
-  if (!confirm('Remove "' + name + '" from the menu?')) return;
-
-  btn.disabled = true;
-  const { error } = await supabaseClient
-    .from('ag_menu_items')
-    .update({ is_deleted: true })
-    .eq('id', id);
-
-  if (error) {
-    btn.disabled = false;
-    alert('Could not remove item: ' + error.message);
     return;
   }
-  loadMenu();
+  if (label) label.textContent = isAvailable ? 'Available' : 'Paused';
 }
 
 document.getElementById('addItemForm').addEventListener('submit', async (e) => {
