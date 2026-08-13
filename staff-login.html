@@ -117,7 +117,10 @@ document.getElementById('staffLoginForm').addEventListener('submit', async (e) =
   btn.textContent = 'Log In';
 
   if (error) {
-    showMsg(msgEl, 'Incorrect mobile number or password.', 'error');
+    const friendly = error.message === 'Invalid login credentials'
+      ? 'Incorrect mobile number or password.'
+      : error.message;
+    showMsg(msgEl, friendly, 'error');
     return;
   }
 

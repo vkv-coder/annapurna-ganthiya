@@ -14,7 +14,10 @@
 <div class="page" id="appRoot" style="display:none;">
   <div class="top-bar">
     <h1>Waiter Screen</h1>
-    <button class="icon-btn" id="logoutBtn">Log Out</button>
+    <div style="display:flex; gap:12px; align-items:center;">
+      <a href="owner-dashboard.html" class="icon-btn" id="backToDashboardLink" style="display:none;">&larr; Dashboard</a>
+      <button class="icon-btn" id="logoutBtn">Log Out</button>
+    </div>
   </div>
 
   <div id="ticketsWrap">
@@ -239,6 +242,7 @@ document.getElementById('logoutBtn').addEventListener('click', async () => {
   }
 
   isOwnerSession = access.isOwner;
+  if (isOwnerSession) document.getElementById('backToDashboardLink').style.display = 'inline';
   const { data: sessionData } = await supabaseClient.auth.getSession();
   currentUserId = sessionData.session ? sessionData.session.user.id : null;
 
