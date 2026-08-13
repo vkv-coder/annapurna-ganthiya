@@ -53,13 +53,16 @@
 <div class="page" id="waitingScreen" style="display:none;">
   <div class="card center-text">
     <h2>Almost There</h2>
-    <p style="color:var(--muted);">Pay <strong id="waitingAmount"></strong> using the button below, then wait a moment while the counter confirms your payment.</p>
+    <p style="color:var(--muted);">Total: <strong id="waitingAmount"></strong></p>
 
     <a href="#" class="btn upi-pay-btn" id="upiPayBtn">Pay via UPI</a>
 
     <div class="qr-wrap">
       <canvas id="upiQrCanvas"></canvas>
     </div>
+
+    <p style="color:var(--muted); font-size:13px; margin:14px 0 4px;">— OR —</p>
+    <p style="color:var(--muted);">Pay <strong>cash at the counter</strong> — no need to do anything here, just walk up and pay.</p>
 
     <div class="waiting-spinner"></div>
     <p style="color:var(--muted); font-size:13px;">Waiting for the restaurant to confirm your payment...</p>
