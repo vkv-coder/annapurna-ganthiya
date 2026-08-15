@@ -188,7 +188,7 @@ async function loadMenu() {
         <div class="menu-card" data-id="${item.id}">
           <div class="info">
             <h4>${escapeHtml(item.name)}</h4>
-            <p>₹${item.price} <span style="color:var(--muted);">(${escapeHtml(item.unit)})</span></p>
+            <p><strong>₹${item.price}</strong> <span style="color:var(--muted); margin-left:6px;">(${escapeHtml(item.unit)})</span></p>
           </div>
           <div class="qty-stepper">
             <button type="button" class="qty-minus" data-id="${item.id}">&minus;</button>
