@@ -131,7 +131,7 @@ async function loadReport(from, to) {
 
   const { data: rounds, error } = await supabaseClient
     .from('ag_order_rounds')
-    .select('id, total_amount, payment_method, confirmed_at')
+    .select('id, session_id, total_amount, payment_method, confirmed_at')
     .eq('status', 'confirmed')
     .gte('confirmed_at', from.toISOString())
     .lt('confirmed_at', to.toISOString());
@@ -171,6 +171,20 @@ async function loadReport(from, to) {
     });
   }
 
+  // ---- Persons per bill (session persons_count, attributed per round/bill) ----
+  const sessionIds = [...new Set(rounds.map((r) => r.session_id).filter(Boolean))];
+  let personsBySession = {};
+  if (sessionIds.length > 0) {
+    const { data: sessions } = await supabaseClient
+      .from('ag_sessions')
+      .select('id, persons_count')
+      .in('id', sessionIds);
+    (sessions || []).forEach((s) => { personsBySession[s.id] = s.persons_count || 0; });
+  }
+  const personsByRound = {};
+  rounds.forEach((r) => { personsByRound[r.id] = personsBySession[r.session_id] || 0; });
+  const totalPersons = rounds.reduce((sum, r) => sum + personsByRound[r.id], 0);
+
   // ---- Payment totals ----
   let cashTotal = 0, onlineTotal = 0;
   rounds.forEach((r) => {
@@ -179,12 +193,21 @@ async function loadReport(from, to) {
   });
   const grandTotal = cashTotal + onlineTotal;
 
-  // ---- Item-wise ----
+  // ---- Item-wise, with per-person uplift ----
+  // Uplift = item qty / persons in only the bills that ordered this item (not all persons overall).
   const itemStats = {};
   (items || []).forEach((i) => {
-    if (!itemStats[i.item_name]) itemStats[i.item_name] = { qty: 0, amount: 0, unit: unitById[i.menu_item_id] || '' };
+    if (!itemStats[i.item_name]) {
+      itemStats[i.item_name] = { qty: 0, amount: 0, unit: unitById[i.menu_item_id] || '', roundIds: new Set() };
+    }
     itemStats[i.item_name].qty += i.qty;
     itemStats[i.item_name].amount += i.price * i.qty;
+    itemStats[i.item_name].roundIds.add(i.round_id);
+  });
+  Object.values(itemStats).forEach((s) => {
+    s.bills = s.roundIds.size;
+    s.persons = [...s.roundIds].reduce((sum, rid) => sum + (personsByRound[rid] || 0), 0);
+    s.perPerson = s.persons > 0 ? s.qty / s.persons : null;
   });
   const itemRows = Object.entries(itemStats).sort((a, b) => b[1].amount - a[1].amount);
 
@@ -210,16 +233,26 @@ async function loadReport(from, to) {
       <div class="stat-tile"><div class="stat-label">Cash</div><div class="stat-value">${fmtMoney(cashTotal)}</div></div>
       <div class="stat-tile"><div class="stat-label">Online (UPI)</div><div class="stat-value">${fmtMoney(onlineTotal)}</div></div>
       <div class="stat-tile"><div class="stat-label">Orders</div><div class="stat-value">${rounds.length}</div></div>
+      <div class="stat-tile"><div class="stat-label">Total Persons</div><div class="stat-value">${totalPersons}</div></div>
       <div class="stat-tile"><div class="stat-label">Total GST</div><div class="stat-value">${fmtMoney(totalGst)}</div></div>
     </div>
 
     <div class="section-title">Item-wise Sales</div>
+    <p style="color:var(--muted); font-size:12.5px; margin:-6px 0 10px;">"Avg/Person" = this item's total qty ÷ persons in only the bills that ordered it (not all persons in the period).</p>
     <div class="report-table-wrap">
       <table class="bill-table">
-        <thead><tr><th>Item</th><th>Unit</th><th class="num">Qty</th><th class="num">Amount</th></tr></thead>
+        <thead><tr><th>Item</th><th>Unit</th><th class="num">Qty</th><th class="num">Amount</th><th class="num">Bills</th><th class="num">Persons</th><th class="num">Avg/Person</th></tr></thead>
         <tbody>
           ${itemRows.map(([name, s]) => `
-            <tr><td>${escapeHtml(name)}</td><td>${escapeHtml(s.unit)}</td><td class="num">${s.qty}</td><td class="num">${fmtMoney(s.amount)}</td></tr>
+            <tr>
+              <td>${escapeHtml(name)}</td>
+              <td>${escapeHtml(s.unit)}</td>
+              <td class="num">${s.qty}</td>
+              <td class="num">${fmtMoney(s.amount)}</td>
+              <td class="num">${s.bills}</td>
+              <td class="num">${s.persons}</td>
+              <td class="num">${s.perPerson === null ? '—' : s.perPerson.toFixed(1)}</td>
+            </tr>
           `).join('')}
         </tbody>
       </table>
