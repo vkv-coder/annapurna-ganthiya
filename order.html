@@ -65,7 +65,7 @@
 
 <div class="page" id="waitingScreen" style="display:none;">
   <div class="card center-text">
-    <button type="button" class="btn-outline" id="backToMenuBtn" style="width:auto; padding:8px 14px; min-height:auto; margin-bottom:10px;">&larr; Need to add an item? Go back</button>
+    <button type="button" class="btn-tan" id="backToMenuBtn">&larr; Need to add an item? Go back</button>
 
     <h2>Almost There</h2>
     <p style="color:var(--muted);">Total: <strong id="waitingAmount"></strong></p>
@@ -411,9 +411,11 @@ function buildUpiLink(amount) {
 }
 
 let currentRoundId = null;
+let lastPlacedItems = [];
 
 function showWaitingScreen(round, items) {
   currentRoundId = round.id;
+  lastPlacedItems = items || [];
   document.getElementById('waitingAmount').textContent = '₹' + round.total_amount;
   const upiLink = buildUpiLink(round.total_amount);
   document.getElementById('upiPayBtn').href = upiLink;
@@ -429,7 +431,7 @@ function showWaitingScreen(round, items) {
 
 document.getElementById('backToMenuBtn').addEventListener('click', async () => {
   if (!currentRoundId) return;
-  if (!confirm('Go back to add more items? This order will be cancelled — you\'ll add everything again together.')) return;
+  if (!confirm('Go back to recheck your order? You can add or modify items and the total will update.')) return;
 
   const btn = document.getElementById('backToMenuBtn');
   btn.disabled = true;
@@ -448,6 +450,17 @@ document.getElementById('backToMenuBtn').addEventListener('click', async () => {
 
   stopPolling();
   currentRoundId = null;
+
+  // Restore the items that were on this order so nothing is lost — customer can
+  // recheck, add more, or adjust quantities from exactly where they left off.
+  lastPlacedItems.forEach((i) => {
+    cart[i.id] = { id: i.id, name: i.name, price: i.price, unit: i.unit, qty: i.qty };
+    const span = document.getElementById('qty-' + i.id);
+    if (span) span.textContent = i.qty;
+  });
+  lastPlacedItems = [];
+  renderCartBar();
+
   showOrderForm(false);
 });
 

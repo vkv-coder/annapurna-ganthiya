@@ -91,6 +91,21 @@ body {
   margin-top: 2px;
 }
 
+.btn-tan {
+  width: auto;
+  padding: 10px 16px;
+  min-height: auto;
+  margin-bottom: 12px;
+  background: #d9b382;
+  color: #4a3418;
+  font-weight: 700;
+  border: 1px solid #c49a63;
+}
+
+.btn-tan:active {
+  background: #c49a63;
+}
+
 .modal-overlay {
   position: fixed;
   inset: 0;
