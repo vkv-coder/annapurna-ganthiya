@@ -36,15 +36,6 @@
     Total: <span id="topTotalAmount">₹0</span>
   </div>
 
-  <div class="card" id="newSessionFields">
-    <h2>Before You Order</h2>
-    <label for="personsCount">Number of Persons</label>
-    <input type="text" id="personsCount" inputmode="numeric" placeholder="e.g. 4">
-
-    <label for="whatsappNumber">Your WhatsApp Number</label>
-    <input type="tel" id="whatsappNumber" inputmode="numeric" placeholder="10-digit mobile number">
-  </div>
-
   <div class="staff-list" id="menuListWrap" style="margin-top:16px;">
     <div class="empty-state" id="menuLoadingMsg">Loading menu...</div>
   </div>
@@ -54,6 +45,21 @@
   <div class="cart-bar" id="cartBar">
     <span class="cart-total" id="cartTotal">Add items to order</span>
     <button type="button" id="placeOrderBtn" disabled>Place Order</button>
+  </div>
+</div>
+
+<div class="modal-overlay" id="newSessionModal" style="display:none;">
+  <div class="card modal-card">
+    <h2>Before You Order</h2>
+    <p style="color:var(--muted); font-size:13px; margin-top:-6px;">Just need this once for your table.</p>
+    <label for="personsCount">Number of Persons</label>
+    <input type="text" id="personsCount" inputmode="numeric" placeholder="e.g. 4">
+
+    <label for="whatsappNumber">Your WhatsApp Number</label>
+    <input type="tel" id="whatsappNumber" inputmode="numeric" placeholder="10-digit mobile number">
+
+    <div class="msg" id="newSessionMsg"></div>
+    <button type="button" class="btn-primary" id="saveSessionDetailsBtn">Continue</button>
   </div>
 </div>
 
@@ -214,7 +220,19 @@ async function loadMenu() {
   document.querySelectorAll('.qty-minus').forEach((btn) => btn.addEventListener('click', () => changeQty(btn.dataset.id, -1)));
 }
 
+let pendingFirstItem = null;
+
 function changeQty(itemId, delta) {
+  // First item added in a brand-new session — collect persons/WhatsApp before letting it through.
+  if (delta > 0 && !getLocalSession() && Object.keys(cart).length === 0) {
+    pendingFirstItem = { itemId, delta };
+    openSessionModal();
+    return;
+  }
+  applyQtyChange(itemId, delta);
+}
+
+function applyQtyChange(itemId, delta) {
   const item = menuItems.find((m) => m.id === itemId);
   if (!item) return;
 
@@ -230,6 +248,37 @@ function changeQty(itemId, delta) {
   document.getElementById('qty-' + itemId).textContent = next;
   renderCartBar();
 }
+
+// ---------- New-session details modal ----------
+
+function openSessionModal() {
+  document.getElementById('newSessionModal').style.display = 'flex';
+}
+
+function closeSessionModal() {
+  document.getElementById('newSessionModal').style.display = 'none';
+}
+
+document.getElementById('saveSessionDetailsBtn').addEventListener('click', () => {
+  const msgEl = document.getElementById('newSessionMsg');
+  const personsCount = parseInt(document.getElementById('personsCount').value, 10);
+  const whatsapp = document.getElementById('whatsappNumber').value.replace(/\D/g, '');
+
+  if (!personsCount || personsCount < 1) {
+    showMsg(msgEl, 'Please enter number of persons.', 'error');
+    return;
+  }
+  if (whatsapp.length !== 10) {
+    showMsg(msgEl, 'Please enter a valid 10-digit WhatsApp number.', 'error');
+    return;
+  }
+
+  closeSessionModal();
+  if (pendingFirstItem) {
+    applyQtyChange(pendingFirstItem.itemId, pendingFirstItem.delta);
+    pendingFirstItem = null;
+  }
+});
 
 function cartTotal() {
   return Object.values(cart).reduce((sum, i) => sum + i.price * i.qty, 0);
@@ -254,7 +303,6 @@ function renderCartBar() {
 // ---------- Order form ----------
 
 function showOrderForm(isNewSession) {
-  document.getElementById('newSessionFields').style.display = isNewSession ? 'block' : 'none';
   showScreen('orderFormScreen');
 }
 
@@ -275,12 +323,11 @@ document.getElementById('placeOrderBtn').addEventListener('click', async () => {
   if (isNewSession) {
     personsCount = parseInt(document.getElementById('personsCount').value, 10);
     whatsapp = document.getElementById('whatsappNumber').value.replace(/\D/g, '');
-    if (!personsCount || personsCount < 1) {
-      showMsg(msgEl, 'Please enter number of persons.', 'error');
-      return;
-    }
-    if (whatsapp.length !== 10) {
-      showMsg(msgEl, 'Please enter a valid 10-digit WhatsApp number.', 'error');
+    if (!personsCount || personsCount < 1 || whatsapp.length !== 10) {
+      // Shouldn't normally happen (the modal collects these before the first item can be
+      // added), but as a safety net: pop the modal back up rather than fail silently.
+      alert('Please fill in number of persons and your WhatsApp number to continue.');
+      openSessionModal();
       return;
     }
   }
