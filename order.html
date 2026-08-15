@@ -144,10 +144,15 @@ function setLocalSession(data) {
 
 // ---------- Menu + cart ----------
 
+const CATEGORY_ORDER = [
+  'Gathiya & Jalebi', 'Bhajiya', 'Hot Snack', 'Thepla',
+  'Morning Bites', 'Chole / Kulcha / Puri Shak', 'Tea / Coffee / Bun', 'Extra'
+];
+
 async function loadMenu() {
   const { data, error } = await supabaseClient
     .from('ag_menu_items')
-    .select('id, name, price, unit')
+    .select('id, name, price, unit, category')
     .eq('is_paused', false)
     .eq('is_deleted', false)
     .order('name', { ascending: true });
@@ -165,17 +170,33 @@ async function loadMenu() {
     return;
   }
 
-  wrap.innerHTML = menuItems.map((item) => `
-    <div class="menu-item-row" data-id="${item.id}">
-      <div class="info">
-        <h4>${escapeHtml(item.name)}</h4>
-        <p><strong>₹${item.price}</strong> <span style="color:var(--muted);">(${escapeHtml(item.unit)})</span></p>
-      </div>
-      <div class="qty-stepper">
-        <button type="button" class="qty-minus" data-id="${item.id}">&minus;</button>
-        <span class="qty-value" id="qty-${item.id}">0</span>
-        <button type="button" class="qty-plus" data-id="${item.id}">+</button>
-      </div>
+  const groups = {};
+  menuItems.forEach((item) => {
+    const cat = item.category || 'General';
+    (groups[cat] = groups[cat] || []).push(item);
+  });
+
+  const orderedCats = [
+    ...CATEGORY_ORDER.filter((c) => groups[c]),
+    ...Object.keys(groups).filter((c) => !CATEGORY_ORDER.includes(c)).sort()
+  ];
+
+  wrap.innerHTML = orderedCats.map((cat) => `
+    <h3 class="menu-category-header">${escapeHtml(cat)}</h3>
+    <div class="menu-grid">
+      ${groups[cat].map((item) => `
+        <div class="menu-card" data-id="${item.id}">
+          <div class="info">
+            <h4>${escapeHtml(item.name)}</h4>
+            <p>₹${item.price} <span style="color:var(--muted);">(${escapeHtml(item.unit)})</span></p>
+          </div>
+          <div class="qty-stepper">
+            <button type="button" class="qty-minus" data-id="${item.id}">&minus;</button>
+            <span class="qty-value" id="qty-${item.id}">0</span>
+            <button type="button" class="qty-plus" data-id="${item.id}">+</button>
+          </div>
+        </div>
+      `).join('')}
     </div>
   `).join('');
 
