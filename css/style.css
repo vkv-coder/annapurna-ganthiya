@@ -96,7 +96,7 @@ body {
   top: 0;
   width: 100%;
   max-width: 420px;
-  background: var(--brand);
+  background: var(--success);
   color: #fff;
   border-radius: var(--radius);
   padding: 10px 18px;
