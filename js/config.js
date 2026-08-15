@@ -4,7 +4,7 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 const GAS_RELAY_URL = 'https://script.google.com/macros/s/AKfycbwNAxiSandIkgt4N6Df9eGzsaHsaIQHshvapiLdMpEsdtBX83jjAo5nCLLWMU4OqmMy/exec';
 const SUPPORT_EMAIL = 'vkvcoder.support@gmail.com';
 const STAFF_EMAIL_DOMAIN = '@ag.local';
-const RESTAURANT_DISPLAY_NAME = 'Darsham Ganthiya';
+const RESTAURANT_DISPLAY_NAME = 'Dasaram Ganthiya & Bhajiya';
 
 // TEMPORARY TEST VALUE — this is the developer's personal UPI ID, used to prove out the
 // pay-then-approve flow end to end. MUST be swapped for the restaurant's real business UPI ID

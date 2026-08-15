@@ -1,7 +1,7 @@
 {
-  "name": "Darsham Ganthiya",
-  "short_name": "Darsham Ganthiya",
-  "description": "Restaurant ordering app for Darsham Ganthiya",
+  "name": "Dasaram Ganthiya & Bhajiya",
+  "short_name": "Dasaram",
+  "description": "Restaurant ordering app for Dasaram Ganthiya & Bhajiya",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",

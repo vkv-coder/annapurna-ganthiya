@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
-<title>Darsham Ganthiya - Order</title>
+<title>Dasaram Ganthiya & Bhajiya - Order</title>
 <link rel="manifest" href="./manifest.json">
 <link rel="icon" href="./icons/icon.svg" type="image/svg+xml">
 <meta name="theme-color" content="#d9480f">
@@ -24,9 +24,16 @@
 
 <div class="page" id="orderFormScreen" style="display:none;">
   <div class="brand-header">
-    <div class="logo-mark">DG</div>
-    <h1>Darsham Ganthiya</h1>
+    <div class="logo-mark">D</div>
+    <h1 class="brand-title">
+      <span class="brand-title-main">DASARAM</span>
+      <span class="brand-title-sub">ગાંઠિયા &amp; ભજિયા</span>
+    </h1>
     <p class="tagline" id="tableLabel">Table</p>
+  </div>
+
+  <div class="top-total-bar" id="topTotalBar">
+    Total: <span id="topTotalAmount">₹0</span>
   </div>
 
   <div class="card" id="newSessionFields">
@@ -71,8 +78,11 @@
 
 <div class="page" id="billScreen" style="display:none;">
   <div class="brand-header">
-    <div class="logo-mark">DG</div>
-    <h1>Darsham Ganthiya</h1>
+    <div class="logo-mark">D</div>
+    <h1 class="brand-title">
+      <span class="brand-title-main">DASARAM</span>
+      <span class="brand-title-sub">ગાંઠિયા &amp; ભજિયા</span>
+    </h1>
     <p class="tagline">Order Confirmed</p>
   </div>
 
@@ -229,6 +239,8 @@ function renderCartBar() {
   const items = Object.values(cart);
   const totalEl = document.getElementById('cartTotal');
   const btn = document.getElementById('placeOrderBtn');
+
+  document.getElementById('topTotalAmount').textContent = '₹' + cartTotal();
 
   if (items.length === 0) {
     totalEl.textContent = 'Add items to order';
