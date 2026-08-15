@@ -65,6 +65,8 @@
 
 <div class="page" id="waitingScreen" style="display:none;">
   <div class="card center-text">
+    <button type="button" class="btn-outline" id="backToMenuBtn" style="width:auto; padding:8px 14px; min-height:auto; margin-bottom:10px;">&larr; Need to add an item? Go back</button>
+
     <h2>Almost There</h2>
     <p style="color:var(--muted);">Total: <strong id="waitingAmount"></strong></p>
 
@@ -408,7 +410,10 @@ function buildUpiLink(amount) {
     '&cu=INR';
 }
 
+let currentRoundId = null;
+
 function showWaitingScreen(round, items) {
+  currentRoundId = round.id;
   document.getElementById('waitingAmount').textContent = '₹' + round.total_amount;
   const upiLink = buildUpiLink(round.total_amount);
   document.getElementById('upiPayBtn').href = upiLink;
@@ -421,6 +426,30 @@ function showWaitingScreen(round, items) {
   showScreen('waitingScreen');
   startPolling(round.id);
 }
+
+document.getElementById('backToMenuBtn').addEventListener('click', async () => {
+  if (!currentRoundId) return;
+  if (!confirm('Go back to add more items? This order will be cancelled — you\'ll add everything again together.')) return;
+
+  const btn = document.getElementById('backToMenuBtn');
+  btn.disabled = true;
+
+  const { error } = await supabaseClient
+    .from('ag_order_rounds')
+    .update({ status: 'cancelled' })
+    .eq('id', currentRoundId);
+
+  btn.disabled = false;
+
+  if (error) {
+    alert('Could not go back automatically: ' + error.message + '. Please ask a staff member for help.');
+    return;
+  }
+
+  stopPolling();
+  currentRoundId = null;
+  showOrderForm(false);
+});
 
 function startPolling(roundId) {
   stopPolling();
