@@ -63,6 +63,51 @@ function fmtMoney(n) {
   return '₹' + Number(n || 0).toFixed(2).replace(/\.00$/, '');
 }
 
+// Parses free-text unit labels like "100 gm", "1 kg", "50 ml", "1 pc", "1 plate — 3 thepla, ..."
+// into a base quantity-per-order + base unit, so item totals/avg-per-person can be shown in
+// real-world units (g/kg, ml/L, or count) instead of raw decimals.
+function parseUnit(unitStr) {
+  const raw = (unitStr || '').toLowerCase().trim();
+  const body = raw.replace(/^per\s+/, '').trim();
+
+  const weightVolMatch = body.match(/^(\d+(?:\.\d+)?)\s*(kilograms?|kgs?|grams?|gms?|g|litres?|liters?|ltrs?|l|ml)\b/);
+  if (weightVolMatch) {
+    let num = parseFloat(weightVolMatch[1]);
+    const unitWord = weightVolMatch[2];
+    let baseUnit;
+    if (/^(kilograms?|kgs?)$/.test(unitWord)) { num *= 1000; baseUnit = 'g'; }
+    else if (/^(grams?|gms?|g)$/.test(unitWord)) { baseUnit = 'g'; }
+    else if (/^(litres?|liters?|ltrs?|l)$/.test(unitWord)) { num *= 1000; baseUnit = 'ml'; }
+    else { baseUnit = 'ml'; }
+    return { qtyPerOrder: num, baseUnit, measured: true };
+  }
+
+  // Only take the leading number + word as the unit (e.g. "2 pcs" out of "2 pcs (60 gm)",
+  // "plate" out of "1 plate — 3 thepla, sukibhaji, curd, ..."); ignore trailing description text.
+  const countMatch = body.match(/^(\d+(?:\.\d+)?)\s*([a-z]+)/);
+  if (countMatch) {
+    return { qtyPerOrder: parseFloat(countMatch[1]), baseUnit: countMatch[2], measured: false };
+  }
+
+  const wordMatch = body.match(/^([a-z]+)/);
+  return { qtyPerOrder: 1, baseUnit: wordMatch ? wordMatch[1] : (body || 'unit'), measured: false };
+}
+
+function trimNum(n) {
+  return Number(n.toFixed(2)).toString();
+}
+
+function formatBaseQty(totalBase, parsedUnit) {
+  if (totalBase === null || totalBase === undefined) return '—';
+  if (parsedUnit.measured && parsedUnit.baseUnit === 'g') {
+    return totalBase >= 1000 ? trimNum(totalBase / 1000) + ' kg' : trimNum(totalBase) + ' g';
+  }
+  if (parsedUnit.measured && parsedUnit.baseUnit === 'ml') {
+    return totalBase >= 1000 ? trimNum(totalBase / 1000) + ' L' : trimNum(totalBase) + ' ml';
+  }
+  return trimNum(totalBase) + ' ' + parsedUnit.baseUnit;
+}
+
 function localMidnight(date) {
   const d = new Date(date);
   d.setHours(0, 0, 0, 0);
@@ -207,7 +252,9 @@ async function loadReport(from, to) {
   Object.values(itemStats).forEach((s) => {
     s.bills = s.roundIds.size;
     s.persons = [...s.roundIds].reduce((sum, rid) => sum + (personsByRound[rid] || 0), 0);
-    s.perPerson = s.persons > 0 ? s.qty / s.persons : null;
+    s.parsedUnit = parseUnit(s.unit);
+    s.totalBaseQty = s.qty * s.parsedUnit.qtyPerOrder;
+    s.perPersonBaseQty = s.persons > 0 ? s.totalBaseQty / s.persons : null;
   });
   const itemRows = Object.entries(itemStats).sort((a, b) => b[1].amount - a[1].amount);
 
@@ -241,17 +288,17 @@ async function loadReport(from, to) {
     <p style="color:var(--muted); font-size:12.5px; margin:-6px 0 10px;">"Avg/Person" = this item's total qty ÷ persons in only the bills that ordered it (not all persons in the period).</p>
     <div class="report-table-wrap">
       <table class="bill-table">
-        <thead><tr><th>Item</th><th>Unit</th><th class="num">Qty</th><th class="num">Amount</th><th class="num">Bills</th><th class="num">Persons</th><th class="num">Avg/Person</th></tr></thead>
+        <thead><tr><th>Item</th><th>Unit</th><th class="num">Total Qty</th><th class="num">Amount</th><th class="num">Bills</th><th class="num">Persons</th><th class="num">Avg/Person</th></tr></thead>
         <tbody>
           ${itemRows.map(([name, s]) => `
             <tr>
               <td>${escapeHtml(name)}</td>
               <td>${escapeHtml(s.unit)}</td>
-              <td class="num">${s.qty}</td>
+              <td class="num">${formatBaseQty(s.totalBaseQty, s.parsedUnit)}</td>
               <td class="num">${fmtMoney(s.amount)}</td>
               <td class="num">${s.bills}</td>
               <td class="num">${s.persons}</td>
-              <td class="num">${s.perPerson === null ? '—' : s.perPerson.toFixed(1)}</td>
+              <td class="num">${formatBaseQty(s.perPersonBaseQty, s.parsedUnit)}</td>
             </tr>
           `).join('')}
         </tbody>
