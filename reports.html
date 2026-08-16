@@ -70,7 +70,10 @@ function parseUnit(unitStr) {
   const raw = (unitStr || '').toLowerCase().trim();
   const body = raw.replace(/^per\s+/, '').trim();
 
-  const weightVolMatch = body.match(/^(\d+(?:\.\d+)?)\s*(kilograms?|kgs?|grams?|gms?|g|litres?|liters?|ltrs?|l|ml)\b/);
+  // If the unit calls out a minimum order quantity (e.g. "100 gm (min. 250 gm)"), orders are
+  // actually taken in minimum-batch units — use that as the base instead of the pricing rate.
+  const minMatch = body.match(/min\.?\s*(\d+(?:\.\d+)?)\s*(kilograms?|kgs?|grams?|gms?|g|litres?|liters?|ltrs?|l|ml)\b/);
+  const weightVolMatch = minMatch || body.match(/^(\d+(?:\.\d+)?)\s*(kilograms?|kgs?|grams?|gms?|g|litres?|liters?|ltrs?|l|ml)\b/);
   if (weightVolMatch) {
     let num = parseFloat(weightVolMatch[1]);
     const unitWord = weightVolMatch[2];
