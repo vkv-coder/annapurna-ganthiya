@@ -12,6 +12,7 @@
   --warn-bg: #fff4e6;
   --danger: #c92a2a;
   --danger-bg: #fff0f0;
+  --brand-blue: #1971c2;
   --radius: 14px;
   --shadow: 0 2px 10px rgba(36, 32, 28, 0.06);
 }
@@ -316,7 +317,15 @@ footer.site-footer a {
 
 footer.site-footer .powered-by {
   margin-top: 6px;
-  font-weight: 600;
+  font-weight: 700;
+  font-size: 15px;
+}
+
+footer.site-footer .powered-by .brand-any {
+  color: var(--brand-blue);
+}
+
+footer.site-footer .powered-by .brand-apps {
   color: var(--brand-dark);
 }
 
